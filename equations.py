@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thurs Aug 12 2025
+Created on Tues Aug 12 2025
 @name:   Variable Objects
 @author: Jack Kirby Cook
 
@@ -8,17 +8,18 @@ Created on Thurs Aug 12 2025
 
 import inspect
 from itertools import chain
-from functools import reduce
+from functools import reduce, wraps
 from abc import ABC, ABCMeta, abstractmethod
 from collections import namedtuple as ntuple
+from collections import OrderedDict as ODict
 
-from support.meta import ProxyMeta
+from support.meta import ProxyMeta, AttributeMeta
 from support.trees import Node
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
 __all__ = ["Variable", "Equation"]
-__copyright__ = "Copyright 2023, Jack Kirby Cook"
+__copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
@@ -26,17 +27,17 @@ class Domain(ntuple("Domain", "arguments parameters")):
     def __iter__(self): return chain(self.arguments, self.parameters)
 
 
-class Variable(Node, ABC, metaclass=ProxyMeta):
+class VariableMeta(ProxyMeta, AttributeMeta): pass
+class Variable(Node, ABC, metaclass=VariableMeta):
     def __init__(self, varkey, varname, vartype, *args, **kwargs):
         super().__init__(*args, linear=False, multiple=False, **kwargs)
-        self.__name = varname
-        self.__type = vartype
-        self.__key = varkey
-        self.__value = None
+        self.__vartype = vartype
+        self.__varname = varname
+        self.__varkey = varkey
+        self.__varvalue = None
 
-    def __bool__(self): return self.value is not None
-    def __repr__(self): return str(self.key)
-    def __str__(self): return str(self.name)
+    def __bool__(self): return self.varvalue is not None
+    def __str__(self): return str(self.varkey)
 
     @abstractmethod
     def execute(self, order): pass
@@ -49,34 +50,32 @@ class Variable(Node, ABC, metaclass=ProxyMeta):
         yield from generator
 
     @property
-    def name(self): return self.__name
+    def vartype(self): return self.__vartype
     @property
-    def type(self): return self.__type
+    def varname(self): return self.__varname
     @property
-    def key(self): return self.__key
+    def varkey(self): return self.__varkey
     @property
-    def value(self): return self.__value
-    @value.setter
-    def value(self, value): self.__value = value
+    def varvalue(self): return self.__varvalue
+    @varvalue.setter
+    def varvalue(self, value): self.__varvalue = value
 
 
-class ArgumentVariable(Variable, ABC):
+class ArgumentVariable(Variable, ABC, attribute="Argument"):
     def execute(self, order):
         argument = order.index(self)
         wrapper = lambda arguments, parameters: arguments[argument]
-        wrapper.__name__ = repr(self)
         return wrapper
 
 
-class ParameterVariable(Variable, ABC):
+class ParameterVariable(Variable, ABC, attribute="Parameter"):
     def execute(self, order):
         parameter = str(self)
         wrapper = lambda arguments, parameters: parameters[parameter]
-        wrapper.__name__ = repr(self)
         return wrapper
 
 
-class DerivedVariable(Variable, ABC):
+class DerivedVariable(Variable, ABC, attribute="Derived"):
     def __init__(self, *args, function, **kwargs):
         super().__init__(*args, **kwargs)
         signature = inspect.signature(function).parameters.items()
@@ -88,7 +87,7 @@ class DerivedVariable(Variable, ABC):
 
     def execute(self, order):
         children = list(self.children.items())
-        if bool(self): wrapper = lambda arguments, parameters: self.varValue
+        if bool(self): wrapper = lambda arguments, parameters: self.value
         else:
             primary = [variable.execute(order) for key, variable in children if key in self.domain.arguments]
             secondary = {key: variable.execute(order) for key, variable in children if key in self.domain.parameters}
@@ -96,7 +95,6 @@ class DerivedVariable(Variable, ABC):
             primary = lambda arguments, parameters: [execute(arguments, parameters) for execute in executes.arguments]
             secondary = lambda arguments, parameters: {key: execute(arguments, parameters) for key, execute in executes.parameters.items()}
             wrapper = lambda arguments, parameters: self.function(*primary(arguments, parameters), **secondary(arguments, parameters))
-        wrapper.__name__ = repr(self)
         return wrapper
 
     @property
@@ -120,14 +118,18 @@ class EquationMeta(ABCMeta):
         cls.__proxys__ = dict(existing) | dict(updated)
 
     def __call__(cls, *args, **kwargs):
-        variables = [proxy(*args, **kwargs) for key, proxy in cls.proxys.items()]
+        variables = [proxy(initialize=True) for key, proxy in cls.proxys.items()]
         assert all([isinstance(variable, Variable) for variable in variables])
-        variables = {repr(variable): variable for variable in variables}
+        variables = {str(variable): variable for variable in variables}
         for variable in variables.values():
             if not isinstance(variable, DerivedVariable): continue
             for key in list(variable.domain):
                 variable[key] = variables[key]
-        return super(EquationMeta, cls).__call__(variables, *args, **kwargs)
+        sources = cls.sources(*args, **kwargs)
+        for key, variable in variables.items():
+            if isinstance(variable, DerivedVariable): continue
+            else: variable.value = sources.get(key, None)
+        return super(EquationMeta, cls).__call__(variables)
 
     @property
     def proxys(cls): return cls.__proxys__
@@ -135,22 +137,41 @@ class EquationMeta(ABCMeta):
 
 class Equation(ABC, metaclass=EquationMeta):
     def __init_subclass__(cls, *args, **kwargs): pass
-    def __init__(self, variables, *args, **kwargs):
+    def __init__(self, variables):
         assert isinstance(variables, dict)
         assert all([isinstance(variable, Variable) for variable in variables.values()])
         self.__variables = dict(variables)
-
-    def __enter__(self): return self
-    def __exit__(self, error_type, error_value, error_traceback):
-        for key in list(self.variables.keys()):
-            del self.variables[key]
 
     def __getattr__(self, attribute):
         variables = {key: variable for key, variable in self.variables.items()}
         if attribute not in variables.keys():
             raise AttributeError(attribute)
-        return variables[attribute]
+        variable = variables[attribute]
+        calculate = self.calculate(variable)
+        return calculate
 
+    def __call__(self, *args, **kwargs):
+        pass
+
+    def calculate(self, variable):
+        sources = list(set(variable.sources))
+        arguments = ODict([(source, source.content) for source in sources if isinstance(source, ArgumentVariable)])
+        parameters = ODict([(source, source.content) for source in sources if isinstance(source, ParameterVariable)])
+        parameters = {str(variable): content for variable, content in parameters.items()}
+        order = list(arguments.keys())
+        arguments = list(arguments.values())
+        execute = variable.execute(order)
+
+        @wraps(self.calculate)
+        def wrapper(*args, **kwargs):
+            value = self.algorithm(execute, arguments, parameters, *args, vartype=variable.vartype, **kwargs)
+            value = value.astype(variable.vartype)
+            variable.varvalue = value
+            return value
+        return wrapper
+
+    @abstractmethod
+    def execute(self, execute, arguments, parameters, *args, **kwargs): pass
     @property
     def variables(self): return self.__variables
 
