@@ -150,9 +150,6 @@ class Equation(ABC, metaclass=EquationMeta):
         calculate = self.calculate(variable)
         return calculate
 
-    def __call__(self, *args, **kwargs):
-        pass
-
     def calculate(self, variable):
         sources = list(set(variable.sources))
         arguments = ODict([(source, source.content) for source in sources if isinstance(source, ArgumentVariable)])
