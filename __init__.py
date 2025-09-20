@@ -14,11 +14,11 @@ if MODULE not in sys.path: sys.path.append(MODULE)
 
 from algorithms import NumericAlgorithm, IntegralAlgorithm, VectorAlgorithm, ArrayAlgorithm, TableAlgorithm
 from equations import Equation, Variable
-from support.variables import Category
+from support.concepts import Assembly
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["Equations", "Variables"]
+__all__ = ["Variables", "Equations"]
 __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -55,7 +55,8 @@ class TableEquation(TableAlgorithm, Equation):
     pass
 
 
-class Equations(Category): Numeric, Integral, Vector, Array, Table = NumericEquation, IntegralEquation, VectorEquation, ArrayEquation, TableEquation
-class Variables(Category): Constant, Independent, Dependent = ConstantVariable, IndependentVariable, DependentVariable
+class Equations(Assembly): Numeric, Integral, Vector, Array, Table = NumericEquation, IntegralEquation, VectorEquation, ArrayEquation, TableEquation
+class Variables(Assembly): Constant, Independent, Dependent = ConstantVariable, IndependentVariable, DependentVariable
+
 
 

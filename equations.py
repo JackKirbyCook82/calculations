@@ -29,15 +29,13 @@ class Domain(ntuple("Domain", "arguments parameters")):
 
 class VariableMeta(ProxyMeta, AttributeMeta): pass
 class Variable(Node, ABC, metaclass=VariableMeta):
+    def __bool__(self): return bool(self.varvalue is not None)
     def __init__(self, varkey, varname, vartype, *args, **kwargs):
         super().__init__(*args, linear=False, multiple=False, **kwargs)
         self.__vartype = vartype
         self.__varname = varname
         self.__varkey = varkey
         self.__varvalue = None
-
-    def __bool__(self): return self.varvalue is not None
-    def __str__(self): return str(self.varkey)
 
     @abstractmethod
     def execute(self, order): pass
@@ -61,18 +59,13 @@ class Variable(Node, ABC, metaclass=VariableMeta):
     def varvalue(self, value): self.__varvalue = value
 
 
-class ArgumentVariable(Variable, ABC, attribute="Argument"):
-    def execute(self, order):
-        argument = order.index(self)
-        wrapper = lambda arguments, parameters: arguments[argument]
-        return wrapper
+class SourceVariable(Variable, ABC):
+    def __init__(self, *args, locator, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__locator = locator
 
-
-class ParameterVariable(Variable, ABC, attribute="Parameter"):
-    def execute(self, order):
-        parameter = str(self)
-        wrapper = lambda arguments, parameters: parameters[parameter]
-        return wrapper
+    @property
+    def locator(self): return self.__locator
 
 
 class DerivedVariable(Variable, ABC, attribute="Derived"):
@@ -103,6 +96,19 @@ class DerivedVariable(Variable, ABC, attribute="Derived"):
     def domain(self): return self.__domain
 
 
+class ArgumentVariable(SourceVariable, ABC, attribute="Argument"):
+    def execute(self, order):
+        argument = order.index(self)
+        wrapper = lambda arguments, parameters: arguments[argument]
+        return wrapper
+
+class ParameterVariable(SourceVariable, ABC, attribute="Parameter"):
+    def execute(self, order):
+        parameter = str(self.varkey)
+        wrapper = lambda arguments, parameters: parameters[parameter]
+        return wrapper
+
+
 class EquationMeta(ABCMeta):
     def __new__(mcs, name, bases, attrs, *args, **kwargs):
         exclude = [key for key, proxy in attrs.items() if isinstance(proxy, Variable)]
@@ -117,18 +123,18 @@ class EquationMeta(ABCMeta):
         updated = {key: proxy for key, proxy in attrs.items() if issubclass(proxy, Variable)}
         cls.__proxys__ = dict(existing) | dict(updated)
 
-    def __call__(cls, *args, **kwargs):
+    def __call__(cls, sources, *args, **kwargs):
         variables = [proxy(initialize=True) for key, proxy in cls.proxys.items()]
         assert all([isinstance(variable, Variable) for variable in variables])
-        variables = {str(variable): variable for variable in variables}
+        variables = {str(variable.varkey): variable for variable in variables}
         for variable in variables.values():
             if not isinstance(variable, DerivedVariable): continue
             for key in list(variable.domain):
                 variable[key] = variables[key]
-        sources = cls.sources(*args, **kwargs)
-        for key, variable in variables.items():
+        for variable in variables.values():
+            name = str(variable.locator)
             if isinstance(variable, DerivedVariable): continue
-            else: variable.value = sources.get(key, None)
+            else: variable.value = sources.get(name, None)
         return super(EquationMeta, cls).__call__(variables)
 
     @property
@@ -154,7 +160,7 @@ class Equation(ABC, metaclass=EquationMeta):
         sources = list(set(variable.sources))
         arguments = ODict([(source, source.content) for source in sources if isinstance(source, ArgumentVariable)])
         parameters = ODict([(source, source.content) for source in sources if isinstance(source, ParameterVariable)])
-        parameters = {str(variable): content for variable, content in parameters.items()}
+        parameters = {str(variable.varkey): content for variable, content in parameters.items()}
         order = list(arguments.keys())
         arguments = list(arguments.values())
         execute = variable.execute(order)

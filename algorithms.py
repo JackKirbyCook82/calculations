@@ -24,10 +24,10 @@ class Algorithm(ABC):
 
 
 class NumericAlgorithm(Algorithm):
-    def execute(self, calculation, arguments, parameters, *args, **kwargs):
+    def execute(self, execute, arguments, parameters, *args, **kwargs):
         assert all([isinstance(argument, np.number) for argument in arguments])
         assert not any([isinstance(parameter, np.number) for parameter in parameters])
-        return calculation(arguments, parameters)
+        return execute(arguments, parameters)
 
 
 class IntegralAlgorithm(Algorithm):
@@ -36,24 +36,24 @@ class IntegralAlgorithm(Algorithm):
 
 
 class VectorAlgorithm(Algorithm):
-    def execute(self, calculation, arguments, parameters, *args, vartype, **kwargs):
+    def execute(self, execute, arguments, parameters, *args, vartype, **kwargs):
         assert all([isinstance(argument, (xr.DataArray, np.number)) for argument in arguments])
         assert not any([isinstance(parameter, xr.DataArray) for parameter in parameters])
-        function = lambda *dataarrays, **constants: calculation(dataarrays, constants)
+        function = lambda *dataarrays, **constants: execute(dataarrays, constants)
         return xr.apply_ufunc(function, *arguments, kwargs=parameters, output_dtypes=[vartype], vectorize=True)
 
 
 class ArrayAlgorithm(Algorithm):
-    def execute(self, calculation, arguments, parameters, *args, **kwargs):
+    def execute(self, execute, arguments, parameters, *args, **kwargs):
         assert all([isinstance(argument, (xr.DataArray, np.ndarray, np.number)) for argument in arguments])
         assert not any([isinstance(parameter, xr.DataArray) for parameter in parameters])
-        return calculation(arguments, parameters)
+        return execute(arguments, parameters)
 
 
 class TableAlgorithm(Algorithm):
-    def execute(self, calculation, arguments, parameters, *args, **kwargs):
+    def execute(self, execute, arguments, parameters, *args, **kwargs):
         assert all([isinstance(argument, pd.Series) for argument in arguments])
         assert not any([isinstance(parameter, pd.Series) for parameter in parameters])
-        function = lambda dataframe, **constants: calculation(dataframe, constants)
+        function = lambda dataframe, **constants: execute(dataframe, constants)
         return pd.concat(arguments, axis=1).apply(function, axis=1, raw=True, **parameters)
 
