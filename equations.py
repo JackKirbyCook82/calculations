@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tues Aug 12 2025
-@name:   Variable Objects
+@name:   Equation Objects
 @author: Jack Kirby Cook
 
 """
@@ -38,7 +38,7 @@ class Variable(Node, ABC, metaclass=VariableMeta):
         self.__varvalue = None
 
     @abstractmethod
-    def execute(self, order): pass
+    def calculation(self, order): pass
 
     @property
     def sources(self):
@@ -78,15 +78,15 @@ class DerivedVariable(Variable, ABC, attribute="Derived"):
         self.__function = function
         self.__domain = domain
 
-    def execute(self, order):
+    def calculation(self, order):
         children = list(self.children.items())
         if bool(self): wrapper = lambda arguments, parameters: self.value
         else:
-            primary = [variable.execute(order) for key, variable in children if key in self.domain.arguments]
-            secondary = {key: variable.execute(order) for key, variable in children if key in self.domain.parameters}
-            executes = Domain(primary, secondary)
-            primary = lambda arguments, parameters: [execute(arguments, parameters) for execute in executes.arguments]
-            secondary = lambda arguments, parameters: {key: execute(arguments, parameters) for key, execute in executes.parameters.items()}
+            primary = [variable.calculation(order) for key, variable in children if key in self.domain.arguments]
+            secondary = {key: variable.calculation(order) for key, variable in children if key in self.domain.parameters}
+            calculations = Domain(primary, secondary)
+            primary = lambda arguments, parameters: [calculation(arguments, parameters) for calculation in calculations.arguments]
+            secondary = lambda arguments, parameters: {key: calculation(arguments, parameters) for key, calculation in calculations.parameters.items()}
             wrapper = lambda arguments, parameters: self.function(*primary(arguments, parameters), **secondary(arguments, parameters))
         return wrapper
 
@@ -97,13 +97,13 @@ class DerivedVariable(Variable, ABC, attribute="Derived"):
 
 
 class ArgumentVariable(SourceVariable, ABC, attribute="Argument"):
-    def execute(self, order):
+    def calculation(self, order):
         argument = order.index(self)
         wrapper = lambda arguments, parameters: arguments[argument]
         return wrapper
 
 class ParameterVariable(SourceVariable, ABC, attribute="Parameter"):
-    def execute(self, order):
+    def calculation(self, order):
         parameter = str(self.varkey)
         wrapper = lambda arguments, parameters: parameters[parameter]
         return wrapper
@@ -123,19 +123,41 @@ class EquationMeta(ABCMeta):
         updated = {key: proxy for key, proxy in attrs.items() if issubclass(proxy, Variable)}
         cls.__proxys__ = dict(existing) | dict(updated)
 
+    def __add__(cls, others):
+        assert isinstance(others, list) or issubclass(others, Equation)
+        assert all([issubclass(other, Equation) for other in others]) if isinstance(others, list) else True
+        function = lambda string: str(string).replace("Equation", "")
+        others = others if isinstance(others, list) else [others]
+        name = "".join([function(other.__name__) for other in others])
+        bases = reversed([cls] + others)
+        equation = EquationMeta(str(name), tuple(bases), dict())
+        return equation
+
     def __call__(cls, sources, *args, **kwargs):
         variables = [proxy(initialize=True) for key, proxy in cls.proxys.items()]
         assert all([isinstance(variable, Variable) for variable in variables])
         variables = {str(variable.varkey): variable for variable in variables}
+        variables = cls.connect(variables)
+        variables = cls.source(variables, sources=sources)
+        return super(EquationMeta, cls).__call__(variables, *args, **kwargs)
+
+    @staticmethod
+    def connect(variables):
+        assert isinstance(variables, dict)
         for variable in variables.values():
             if not isinstance(variable, DerivedVariable): continue
             for key in list(variable.domain):
                 variable[key] = variables[key]
+        return variables
+
+    @staticmethod
+    def source(variables, *, sources):
+        assert isinstance(variables, dict)
         for variable in variables.values():
             name = str(variable.locator)
             if isinstance(variable, DerivedVariable): continue
             else: variable.value = sources.get(name, None)
-        return super(EquationMeta, cls).__call__(variables)
+        return variables
 
     @property
     def proxys(cls): return cls.__proxys__
@@ -143,7 +165,7 @@ class EquationMeta(ABCMeta):
 
 class Equation(ABC, metaclass=EquationMeta):
     def __init_subclass__(cls, *args, **kwargs): pass
-    def __init__(self, variables):
+    def __init__(self, variables, *args, **kwargs):
         assert isinstance(variables, dict)
         assert all([isinstance(variable, Variable) for variable in variables.values()])
         self.__variables = dict(variables)
@@ -153,28 +175,30 @@ class Equation(ABC, metaclass=EquationMeta):
         if attribute not in variables.keys():
             raise AttributeError(attribute)
         variable = variables[attribute]
-        calculate = self.calculate(variable)
-        return calculate
+        calculation = self.calculation(variable)
+        return calculation
 
-    def calculate(self, variable):
+    def calculation(self, variable):
         sources = list(set(variable.sources))
         arguments = ODict([(source, source.content) for source in sources if isinstance(source, ArgumentVariable)])
         parameters = ODict([(source, source.content) for source in sources if isinstance(source, ParameterVariable)])
         parameters = {str(variable.varkey): content for variable, content in parameters.items()}
         order = list(arguments.keys())
         arguments = list(arguments.values())
-        execute = variable.execute(order)
+        calculation = variable.calculation(order)
 
-        @wraps(self.calculate)
+        @wraps(self.calculation)
         def wrapper(*args, **kwargs):
-            value = self.algorithm(execute, arguments, parameters, *args, vartype=variable.vartype, **kwargs)
+            value = self.algorithm(calculation, arguments, parameters, *args, vartype=variable.vartype, **kwargs)
             value = value.astype(variable.vartype)
             variable.varvalue = value
             return value
         return wrapper
 
     @abstractmethod
-    def execute(self, execute, arguments, parameters, *args, **kwargs): pass
+    def algorithm(self, calculation, arguments, parameters, *args, **kwargs): pass
     @property
     def variables(self): return self.__variables
+
+
 

@@ -20,40 +20,40 @@ __license__ = "MIT License"
 
 class Algorithm(ABC):
     @abstractmethod
-    def execute(self, execute, arguments, parameters, *args, **kwargs): pass
+    def algorithm(self, calculation, arguments, parameters, *args, **kwargs): pass
 
 
 class NumericAlgorithm(Algorithm):
-    def execute(self, execute, arguments, parameters, *args, **kwargs):
+    def algorithm(self, calculation, arguments, parameters, *args, **kwargs):
         assert all([isinstance(argument, np.number) for argument in arguments])
         assert not any([isinstance(parameter, np.number) for parameter in parameters])
-        return execute(arguments, parameters)
+        return calculation(arguments, parameters)
 
 
 class IntegralAlgorithm(Algorithm):
-    def execute(self, execute, arguments, parameters, *args, **kwargs):
+    def algorithm(self, calculation, arguments, parameters, *args, **kwargs):
         pass
 
 
 class VectorAlgorithm(Algorithm):
-    def execute(self, execute, arguments, parameters, *args, vartype, **kwargs):
+    def algorithm(self, calculation, arguments, parameters, *args, vartype, **kwargs):
         assert all([isinstance(argument, (xr.DataArray, np.number)) for argument in arguments])
         assert not any([isinstance(parameter, xr.DataArray) for parameter in parameters])
-        function = lambda *dataarrays, **constants: execute(dataarrays, constants)
+        function = lambda *dataarrays, **constants: calculation(dataarrays, constants)
         return xr.apply_ufunc(function, *arguments, kwargs=parameters, output_dtypes=[vartype], vectorize=True)
 
 
 class ArrayAlgorithm(Algorithm):
-    def execute(self, execute, arguments, parameters, *args, **kwargs):
+    def algorithm(self, calculation, arguments, parameters, *args, **kwargs):
         assert all([isinstance(argument, (xr.DataArray, np.ndarray, np.number)) for argument in arguments])
         assert not any([isinstance(parameter, xr.DataArray) for parameter in parameters])
-        return execute(arguments, parameters)
+        return calculation(arguments, parameters)
 
 
 class TableAlgorithm(Algorithm):
-    def execute(self, execute, arguments, parameters, *args, **kwargs):
+    def algorithm(self, calculation, arguments, parameters, *args, **kwargs):
         assert all([isinstance(argument, pd.Series) for argument in arguments])
         assert not any([isinstance(parameter, pd.Series) for parameter in parameters])
-        function = lambda dataframe, **constants: execute(dataframe, constants)
+        function = lambda dataframe, **constants: calculation(dataframe, constants)
         return pd.concat(arguments, axis=1).apply(function, axis=1, raw=True, **parameters)
 
