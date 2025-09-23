@@ -8,11 +8,13 @@ Created on Tues Aug 12 2025
 
 import os
 import sys
+from abc import ABC
 
 MODULE = os.path.dirname(os.path.realpath(__file__))
 if MODULE not in sys.path: sys.path.append(MODULE)
 
 from algorithms import NumericAlgorithm, IntegralAlgorithm, VectorAlgorithm, ArrayAlgorithm, TableAlgorithm
+from computations import ArrayComputation, TableComputation
 from equations import Equation, Variable
 from support.concepts import Assembly
 
@@ -35,23 +37,23 @@ class DependentVariable(Variable.Derived):
     pass
 
 
-class NumericEquation(NumericAlgorithm, Equation):
+class NumericEquation(NumericAlgorithm, Equation, ABC):
     pass
 
 
-class IntegralEquation(IntegralAlgorithm, Equation):
+class IntegralEquation(IntegralAlgorithm, Equation, ABC):
     pass
 
 
-class VectorEquation(VectorAlgorithm, Equation):
+class VectorEquation(ArrayComputation, VectorAlgorithm, Equation, ABC):
     pass
 
 
-class ArrayEquation(ArrayAlgorithm, Equation):
+class ArrayEquation(ArrayComputation, ArrayAlgorithm, Equation, ABC):
     pass
 
 
-class TableEquation(TableAlgorithm, Equation):
+class TableEquation(TableComputation, TableAlgorithm, Equation, ABC):
     pass
 
 

@@ -13,7 +13,10 @@ from abc import ABC, ABCMeta, abstractmethod
 from collections import namedtuple as ntuple
 from collections import OrderedDict as ODict
 
+import pandas as pd
+import xarray as xr
 from support.meta import ProxyMeta, AttributeMeta
+from support.decorators import TypeDispatcher
 from support.trees import Node
 
 __version__ = "1.0.0"
@@ -62,6 +65,7 @@ class Variable(Node, ABC, metaclass=VariableMeta):
 class SourceVariable(Variable, ABC):
     def __init__(self, *args, locator, **kwargs):
         super().__init__(*args, **kwargs)
+        locator = locator if isinstance(locator, tuple) else tuple([locator])
         self.__locator = locator
 
     @property
@@ -133,13 +137,31 @@ class EquationMeta(ABCMeta):
         equation = EquationMeta(str(name), tuple(bases), dict())
         return equation
 
-    def __call__(cls, sources, *args, **kwargs):
+    def __call__(cls, *args, arguments, parameters, **kwargs):
         variables = [proxy(initialize=True) for key, proxy in cls.proxys.items()]
         assert all([isinstance(variable, Variable) for variable in variables])
         variables = {str(variable.varkey): variable for variable in variables}
         variables = cls.connect(variables)
-        variables = cls.source(variables, sources=sources)
+        variables = cls.source(variables, arguments, parameters)
         return super(EquationMeta, cls).__call__(variables, *args, **kwargs)
+
+    def source(cls, variables, arguments, parameters):
+        assert isinstance(variables, dict)
+        for variable in variables.values():
+            name = str(variable.locator)
+            if isinstance(variable, DerivedVariable): continue
+            elif isinstance(variable, ArgumentVariable): value = cls.locate(arguments, *variable.locator)
+            elif isinstance(variable, ParameterVariable): value = cls.locate(parameters, *variable.locator)
+            else: raise KeyError(name)
+            variable.value = value
+        return variables
+
+    @TypeDispatcher(locator=0)
+    def locator(cls, sources, locator, *locators): raise TypeError(type(sources))
+    @locator.register(dict, list)
+    def mapping(cls, sources, locator, *locators): return cls.locate(sources[locator], *locators)
+    @locator.register(xr.Dataset, pd.DataFrame)
+    def table(cls, sources, locator, *locators): return sources.get(locator, None)
 
     @staticmethod
     def connect(variables):
@@ -148,15 +170,6 @@ class EquationMeta(ABCMeta):
             if not isinstance(variable, DerivedVariable): continue
             for key in list(variable.domain):
                 variable[key] = variables[key]
-        return variables
-
-    @staticmethod
-    def source(variables, *, sources):
-        assert isinstance(variables, dict)
-        for variable in variables.values():
-            name = str(variable.locator)
-            if isinstance(variable, DerivedVariable): continue
-            else: variable.value = sources.get(name, None)
         return variables
 
     @property
@@ -175,8 +188,15 @@ class Equation(ABC, metaclass=EquationMeta):
         if attribute not in variables.keys():
             raise AttributeError(attribute)
         variable = variables[attribute]
+        if variable.terminal: return lambda: (variable.varname, variable.varvalue)
         calculation = self.calculation(variable)
         return calculation
+
+    def __call__(self, *args, **kwargs):
+        generator = self.execute(*args, **kwargs)
+        contents = dict(generator)
+        content = self.computation(contents, *args, **kwargs)
+        return content
 
     def calculation(self, variable):
         sources = list(set(variable.sources))
@@ -192,11 +212,19 @@ class Equation(ABC, metaclass=EquationMeta):
             value = self.algorithm(calculation, arguments, parameters, *args, vartype=variable.vartype, **kwargs)
             value = value.astype(variable.vartype)
             variable.varvalue = value
-            return value
+            return variable.varname, value
         return wrapper
 
+    @staticmethod
     @abstractmethod
-    def algorithm(self, calculation, arguments, parameters, *args, **kwargs): pass
+    def algorithm(calculation, arguments, parameters, *args, **kwargs): pass
+    @staticmethod
+    @abstractmethod
+    def computation(contents, *args, **kwargs): pass
+
+    @abstractmethod
+    def execute(self, *args, **kwargs): pass
+
     @property
     def variables(self): return self.__variables
 
