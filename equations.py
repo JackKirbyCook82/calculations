@@ -6,6 +6,7 @@ Created on Tues Aug 12 2025
 
 """
 
+import regex as re
 import inspect
 from itertools import chain
 from functools import reduce, wraps
@@ -15,8 +16,8 @@ from collections import OrderedDict as ODict
 
 import pandas as pd
 import xarray as xr
-from support.meta import ProxyMeta, AttributeMeta
 from support.decorators import TypeDispatcher
+from support.meta import AttributeMeta
 from support.trees import Node
 
 __version__ = "1.0.0"
@@ -26,14 +27,39 @@ __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
+class Proxy(object):
+    def __init__(self, variable, arguments, parameters):
+        assert isinstance(arguments, tuple) and issubclass(parameters, dict)
+        self.__parameters = parameters
+        self.__arguments = arguments
+        self.__variable = variable
+
+    def __call__(self, *args, **kwargs):
+        arguments = self.arguments + tuple(args)
+        parameters = self.parameters + dict(kwargs)
+        instance = self.variable(*arguments, **parameters)
+        return instance
+
+    @property
+    def parameters(self): return self.__parameters
+    @property
+    def arguments(self): return self.__arguments
+    @property
+    def variable(self): return self.__variable
+
+
+class Deferred(object):
+    def __init__(self, variable): self.variable = variable
+    def __call__(self, *arguments, **parameters):
+        return Proxy(self.variable, arguments, parameters)
+
+
 class Domain(ntuple("Domain", "arguments parameters")):
     def __iter__(self): return chain(self.arguments, self.parameters)
 
 
-class VariableMeta(ProxyMeta, AttributeMeta): pass
-class Variable(Node, ABC, metaclass=VariableMeta):
+class Variable(Node, ABC, metaclass=AttributeMeta):
     def __bool__(self): return bool(self.varvalue is not None)
-    def __repr__(self): return f"{self.__class__.__name__}[{self.varkey}, {self.varname}, {bool(self)}]"
     def __init__(self, varkey, varname, vartype, *args, **kwargs):
         super().__init__(*args, linear=False, multiple=False, **kwargs)
         self.__vartype = vartype
@@ -73,7 +99,8 @@ class SourceVariable(Variable, ABC):
     def locator(self): return self.__locator
 
 
-class DerivedVariable(Variable, ABC, attribute="Derived"):
+@Deferred
+class DependentVariable(Variable, ABC, attribute="Dependent"):
     def __init__(self, *args, function, **kwargs):
         super().__init__(*args, **kwargs)
         signature = inspect.signature(function).parameters.items()
@@ -101,13 +128,15 @@ class DerivedVariable(Variable, ABC, attribute="Derived"):
     def domain(self): return self.__domain
 
 
-class ArgumentVariable(SourceVariable, ABC, attribute="Argument"):
+@Deferred
+class IndependentVariable(SourceVariable, ABC, attribute="Independent"):
     def calculation(self, order):
         argument = order.index(self)
         wrapper = lambda arguments, parameters: arguments[argument]
         return wrapper
 
-class ParameterVariable(SourceVariable, ABC, attribute="Parameter"):
+@Deferred
+class ConstantVariable(SourceVariable, ABC, attribute="Constant"):
     def calculation(self, order):
         parameter = str(self.varkey)
         wrapper = lambda arguments, parameters: parameters[parameter]
@@ -116,7 +145,7 @@ class ParameterVariable(SourceVariable, ABC, attribute="Parameter"):
 
 class EquationMeta(ABCMeta):
     def __new__(mcs, name, bases, attrs, *args, **kwargs):
-        exclude = [key for key, value in attrs.items() if inspect.isclass(value) and issubclass(value, Variable)]
+        exclude = [key for key, value in attrs.items() if isinstance(value, Proxy)]
         attrs = {key: value for key, value in attrs.items() if key not in exclude}
         cls = super(EquationMeta, mcs).__new__(mcs, name, bases, attrs, *args, **kwargs)
         return cls
@@ -125,21 +154,21 @@ class EquationMeta(ABCMeta):
         super(EquationMeta, cls).__init__(name, bases, attrs, *args, **kwargs)
         existing = [dict(base.proxys) for base in bases if issubclass(type(base), EquationMeta)]
         existing = reduce(lambda lead, lag: lead | lag, existing, dict())
-        updated = {key: value for key, value in attrs.items() if inspect.isclass(value) and issubclass(value, Variable)}
+        updated = {key: value for key, value in attrs.items() if isinstance(value, Proxy)}
         cls.__proxys__ = dict(existing) | dict(updated)
 
     def __add__(cls, others):
         assert isinstance(others, list) or issubclass(others, Equation)
         assert all([issubclass(other, Equation) for other in others]) if isinstance(others, list) else True
-        function = lambda string: str(string).replace("Equation", "")
-        others = others if isinstance(others, list) else [others]
-        name = "".join([function(other.__name__) for other in others])
-        bases = reversed([cls] + others)
+        split = lambda string: re.findall(r'[A-Z][a-z]*', str(string).replace("Equation", ""))
+        bases = (others if isinstance(others, list) else [others]) + [cls]
+        names = [split(base.__name__) for base in bases]
+        name = "".join(list(dict.fromkeys(names))) + "Equation"
         equation = EquationMeta(str(name), tuple(bases), dict())
         return equation
 
     def __call__(cls, *args, arguments, parameters, **kwargs):
-        variables = [proxy(initialize=True) for key, proxy in cls.proxys.items()]
+        variables = [proxy(*args, **kwargs) for key, proxy in cls.proxys.items()]
         assert all([isinstance(variable, Variable) for variable in variables])
         variables = {str(variable.varkey): variable for variable in variables}
         variables = cls.connect(variables)
@@ -150,9 +179,9 @@ class EquationMeta(ABCMeta):
         assert isinstance(variables, dict)
         for variable in variables.values():
             name = str(variable.locator)
-            if isinstance(variable, DerivedVariable): continue
-            elif isinstance(variable, ArgumentVariable): value = cls.locate(arguments, *variable.locator)
-            elif isinstance(variable, ParameterVariable): value = cls.locate(parameters, *variable.locator)
+            if isinstance(variable, DependentVariable): continue
+            elif isinstance(variable, IndependentVariable): value = cls.locate(arguments, *variable.locator)
+            elif isinstance(variable, ConstantVariable): value = cls.locate(parameters, *variable.locator)
             else: raise KeyError(name)
             variable.value = value
         return variables
@@ -168,7 +197,7 @@ class EquationMeta(ABCMeta):
     def connect(variables):
         assert isinstance(variables, dict)
         for variable in variables.values():
-            if not isinstance(variable, DerivedVariable): continue
+            if not isinstance(variable, DependentVariable): continue
             for key in list(variable.domain):
                 variable[key] = variables[key]
         return variables
@@ -201,8 +230,8 @@ class Equation(ABC, metaclass=EquationMeta):
 
     def calculation(self, variable):
         sources = list(set(variable.sources))
-        arguments = ODict([(source, source.content) for source in sources if isinstance(source, ArgumentVariable)])
-        parameters = ODict([(source, source.content) for source in sources if isinstance(source, ParameterVariable)])
+        arguments = ODict([(source, source.content) for source in sources if isinstance(source, IndependentVariable)])
+        parameters = ODict([(source, source.content) for source in sources if isinstance(source, ConstantVariable)])
         parameters = {str(variable.varkey): content for variable, content in parameters.items()}
         order = list(arguments.keys())
         arguments = list(arguments.values())

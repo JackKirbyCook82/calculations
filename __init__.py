@@ -25,36 +25,16 @@ __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ConstantVariable(Variable.Parameter):
-    pass
+class NumericEquation(NumericAlgorithm, Equation, ABC): pass
+class IntegralEquation(IntegralAlgorithm, Equation, ABC): pass
+class VectorEquation(ArrayComputation, VectorAlgorithm, Equation, ABC): pass
+class ArrayEquation(ArrayComputation, ArrayAlgorithm, Equation, ABC): pass
+class TableEquation(TableComputation, TableAlgorithm, Equation, ABC): pass
 
 
-class IndependentVariable(Variable.Argument):
-    pass
-
-
-class DependentVariable(Variable.Derived):
-    pass
-
-
-class NumericEquation(NumericAlgorithm, Equation, ABC):
-    pass
-
-
-class IntegralEquation(IntegralAlgorithm, Equation, ABC):
-    pass
-
-
-class VectorEquation(ArrayComputation, VectorAlgorithm, Equation, ABC):
-    pass
-
-
-class ArrayEquation(ArrayComputation, ArrayAlgorithm, Equation, ABC):
-    pass
-
-
-class TableEquation(TableComputation, TableAlgorithm, Equation, ABC):
-    pass
+class ConstantVariable(Variable.Parameter): pass
+class IndependentVariable(Variable.Argument): pass
+class DependentVariable(Variable.Derived): pass
 
 
 class Equations(Assembly): Numeric, Integral, Vector, Array, Table = NumericEquation, IntegralEquation, VectorEquation, ArrayEquation, TableEquation
