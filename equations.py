@@ -33,6 +33,7 @@ class Domain(ntuple("Domain", "arguments parameters")):
 class VariableMeta(ProxyMeta, AttributeMeta): pass
 class Variable(Node, ABC, metaclass=VariableMeta):
     def __bool__(self): return bool(self.varvalue is not None)
+    def __repr__(self): return f"{self.__class__.__name__}[{self.varkey}, {self.varname}, {bool(self)}]"
     def __init__(self, varkey, varname, vartype, *args, **kwargs):
         super().__init__(*args, linear=False, multiple=False, **kwargs)
         self.__vartype = vartype
@@ -115,7 +116,7 @@ class ParameterVariable(SourceVariable, ABC, attribute="Parameter"):
 
 class EquationMeta(ABCMeta):
     def __new__(mcs, name, bases, attrs, *args, **kwargs):
-        exclude = [key for key, proxy in attrs.items() if isinstance(proxy, Variable)]
+        exclude = [key for key, value in attrs.items() if inspect.isclass(value) and issubclass(value, Variable)]
         attrs = {key: value for key, value in attrs.items() if key not in exclude}
         cls = super(EquationMeta, mcs).__new__(mcs, name, bases, attrs, *args, **kwargs)
         return cls
@@ -124,7 +125,7 @@ class EquationMeta(ABCMeta):
         super(EquationMeta, cls).__init__(name, bases, attrs, *args, **kwargs)
         existing = [dict(base.proxys) for base in bases if issubclass(type(base), EquationMeta)]
         existing = reduce(lambda lead, lag: lead | lag, existing, dict())
-        updated = {key: proxy for key, proxy in attrs.items() if issubclass(proxy, Variable)}
+        updated = {key: value for key, value in attrs.items() if inspect.isclass(value) and issubclass(value, Variable)}
         cls.__proxys__ = dict(existing) | dict(updated)
 
     def __add__(cls, others):
@@ -222,8 +223,8 @@ class Equation(ABC, metaclass=EquationMeta):
     @abstractmethod
     def computation(contents, *args, **kwargs): pass
 
-    @abstractmethod
-    def execute(self, *args, **kwargs): pass
+    @staticmethod
+    def execute(*args, **kwargs): return; yield
 
     @property
     def variables(self): return self.__variables
