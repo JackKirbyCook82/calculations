@@ -6,39 +6,42 @@ Created on Tues Aug 12 2025
 
 """
 
-import regex as re
 import inspect
+import regex as re
+from enum import StrEnum
 from itertools import chain
 from functools import reduce, wraps
 from abc import ABC, ABCMeta, abstractmethod
 from collections import namedtuple as ntuple
 from collections import OrderedDict as ODict
 
-import pandas as pd
-import xarray as xr
-from support.decorators import TypeDispatcher
-from support.meta import AttributeMeta
 from support.trees import Node
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["Variable", "Equation"]
+__all__ = ["Equation", "DependentVariable", "IndependentVariable", "ConstantVariable"]
 __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
+VarTyping = StrEnum("VarTyping", ["CONSTANT", "INDEPENDENT", "DEPENDENT"])
+
+
 class Proxy(object):
     def __init__(self, variable, arguments, parameters):
-        assert isinstance(arguments, tuple) and issubclass(parameters, dict)
+        assert isinstance(arguments, tuple) and isinstance(parameters, dict)
         self.__parameters = parameters
         self.__arguments = arguments
         self.__variable = variable
 
     def __call__(self, *args, **kwargs):
         arguments = self.arguments + tuple(args)
-        parameters = self.parameters + dict(kwargs)
+        parameters = self.parameters | dict(kwargs)
         instance = self.variable(*arguments, **parameters)
         return instance
+
+    @property
+    def vartyping(self): return self.variable.vartyping
 
     @property
     def parameters(self): return self.__parameters
@@ -53,12 +56,18 @@ class Deferred(object):
     def __call__(self, *arguments, **parameters):
         return Proxy(self.variable, arguments, parameters)
 
+    @property
+    def vartyping(self): return self.variable.vartyping
+
 
 class Domain(ntuple("Domain", "arguments parameters")):
     def __iter__(self): return chain(self.arguments, self.parameters)
 
 
-class Variable(Node, ABC, metaclass=AttributeMeta):
+class Variable(Node, ABC):
+    def __init_subclass__(cls, *args, **kwargs):
+        cls.vartyping = kwargs.get("vartyping", getattr(cls, "vartyping", None))
+
     def __bool__(self): return bool(self.varvalue is not None)
     def __init__(self, varkey, varname, vartype, *args, **kwargs):
         super().__init__(*args, linear=False, multiple=False, **kwargs)
@@ -73,8 +82,8 @@ class Variable(Node, ABC, metaclass=AttributeMeta):
     @property
     def sources(self):
         children = self.children.values()
-        if not bool(self): generator = (variable for child in children for variable in child.sources)
-        else: generator = iter([self])
+        if bool(self): generator = iter([self])
+        else: generator = (variable for child in children for variable in child.sources)
         yield from generator
 
     @property
@@ -100,7 +109,7 @@ class SourceVariable(Variable, ABC):
 
 
 @Deferred
-class DependentVariable(Variable, ABC, attribute="Dependent"):
+class DependentVariable(Variable, ABC, vartyping=VarTyping.CONSTANT):
     def __init__(self, *args, function, **kwargs):
         super().__init__(*args, **kwargs)
         signature = inspect.signature(function).parameters.items()
@@ -112,7 +121,7 @@ class DependentVariable(Variable, ABC, attribute="Dependent"):
 
     def calculation(self, order):
         children = list(self.children.items())
-        if bool(self): wrapper = lambda arguments, parameters: self.value
+        if bool(self): wrapper = lambda arguments, parameters: self.varvalue
         else:
             primary = [variable.calculation(order) for key, variable in children if key in self.domain.arguments]
             secondary = {key: variable.calculation(order) for key, variable in children if key in self.domain.parameters}
@@ -129,14 +138,14 @@ class DependentVariable(Variable, ABC, attribute="Dependent"):
 
 
 @Deferred
-class IndependentVariable(SourceVariable, ABC, attribute="Independent"):
+class IndependentVariable(SourceVariable, ABC, vartyping=VarTyping.INDEPENDENT):
     def calculation(self, order):
         argument = order.index(self)
         wrapper = lambda arguments, parameters: arguments[argument]
         return wrapper
 
 @Deferred
-class ConstantVariable(SourceVariable, ABC, attribute="Constant"):
+class ConstantVariable(SourceVariable, ABC, vartyping=VarTyping.DEPENDENT):
     def calculation(self, order):
         parameter = str(self.varkey)
         wrapper = lambda arguments, parameters: parameters[parameter]
@@ -162,7 +171,7 @@ class EquationMeta(ABCMeta):
         assert all([issubclass(other, Equation) for other in others]) if isinstance(others, list) else True
         split = lambda string: re.findall(r'[A-Z][a-z]*', str(string).replace("Equation", ""))
         bases = (others if isinstance(others, list) else [others]) + [cls]
-        names = [split(base.__name__) for base in bases]
+        names = list(chain(*[split(base.__name__) for base in bases]))
         name = "".join(list(dict.fromkeys(names))) + "Equation"
         equation = EquationMeta(str(name), tuple(bases), dict())
         return equation
@@ -172,37 +181,31 @@ class EquationMeta(ABCMeta):
         assert all([isinstance(variable, Variable) for variable in variables])
         variables = {str(variable.varkey): variable for variable in variables}
         variables = cls.connect(variables)
-        variables = cls.source(variables, arguments, parameters)
+        variables = cls.populate(variables, arguments, parameters)
         return super(EquationMeta, cls).__call__(variables, *args, **kwargs)
-
-    def source(cls, variables, arguments, parameters):
-        assert isinstance(variables, dict)
-        for variable in variables.values():
-            name = str(variable.locator)
-            if isinstance(variable, DependentVariable): continue
-            elif isinstance(variable, IndependentVariable): value = cls.locate(arguments, *variable.locator)
-            elif isinstance(variable, ConstantVariable): value = cls.locate(parameters, *variable.locator)
-            else: raise KeyError(name)
-            variable.value = value
-        return variables
-
-    @TypeDispatcher(locator=0)
-    def locator(cls, sources, locator, *locators): raise TypeError(type(sources))
-    @locator.register(dict, list)
-    def mapping(cls, sources, locator, *locators): return cls.locate(sources[locator], *locators)
-    @locator.register(xr.Dataset, pd.DataFrame)
-    def table(cls, sources, locator, *locators): return sources.get(locator, None)
 
     @staticmethod
     def connect(variables):
         assert isinstance(variables, dict)
         for variable in variables.values():
-            if not isinstance(variable, DependentVariable): continue
-            for key in list(variable.domain):
-                variable[key] = variables[key]
+            try: domain = list(variable.domain)
+            except AttributeError: continue
+            for key in domain: variable[key] = variables[key]
         return variables
 
-    @property
+    @staticmethod
+    def populate(variables, arguments, parameters):
+        locate = lambda sources, locator: sources.get(locator, {})
+        function = lambda sources, locator, *locators: function(locate(sources, locator)) if bool(locators) else locate(sources, locator)
+        assert isinstance(variables, dict)
+        for variable in variables.values():
+            if variable.vartyping is VarTyping.DEPENDENT: continue
+            elif variable.vartyping is VarTyping.INDEPENDENT: value = function(arguments, *variable.locator)
+            elif variable.vartyping is VarTyping.CONSTANT: value = function(parameters, *variable.locator)
+            else: raise ValueError(variable.vartyping)
+            variable.varvalue = value
+        return variables
+
     def proxys(cls): return cls.__proxys__
 
 
@@ -230,9 +233,9 @@ class Equation(ABC, metaclass=EquationMeta):
 
     def calculation(self, variable):
         sources = list(set(variable.sources))
-        arguments = ODict([(source, source.content) for source in sources if isinstance(source, IndependentVariable)])
-        parameters = ODict([(source, source.content) for source in sources if isinstance(source, ConstantVariable)])
-        parameters = {str(variable.varkey): content for variable, content in parameters.items()}
+        arguments = ODict([(source, source.varvalue) for source in sources if source.vartyping is VarTyping.INDEPENDENT])
+        parameters = ODict([(source, source.varvalue) for source in sources if source.vartyping is VarTyping.CONSTANT])
+        parameters = {str(variable.varkey): value for variable, value in parameters.items()}
         order = list(arguments.keys())
         arguments = list(arguments.values())
         calculation = variable.calculation(order)

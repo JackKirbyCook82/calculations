@@ -14,8 +14,8 @@ MODULE = os.path.dirname(os.path.realpath(__file__))
 if MODULE not in sys.path: sys.path.append(MODULE)
 
 from algorithms import NumericAlgorithm, IntegralAlgorithm, VectorAlgorithm, ArrayAlgorithm, TableAlgorithm
+from equations import Equation, ConstantVariable, IndependentVariable, DependentVariable
 from computations import ArrayComputation, TableComputation
-from equations import Equation, Variable
 from support.concepts import Assembly
 
 __version__ = "1.0.0"
@@ -30,11 +30,6 @@ class IntegralEquation(IntegralAlgorithm, Equation, ABC): pass
 class VectorEquation(ArrayComputation, VectorAlgorithm, Equation, ABC): pass
 class ArrayEquation(ArrayComputation, ArrayAlgorithm, Equation, ABC): pass
 class TableEquation(TableComputation, TableAlgorithm, Equation, ABC): pass
-
-
-class ConstantVariable(Variable.Parameter): pass
-class IndependentVariable(Variable.Argument): pass
-class DependentVariable(Variable.Derived): pass
 
 
 class Equations(Assembly): Numeric, Integral, Vector, Array, Table = NumericEquation, IntegralEquation, VectorEquation, ArrayEquation, TableEquation
