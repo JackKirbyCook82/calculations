@@ -68,6 +68,7 @@ class Variable(Node, ABC):
         cls.vartyping = kwargs.get("vartyping", getattr(cls, "vartyping", None))
 
     def __bool__(self): return bool(self.varvalue is not None)
+    def __str__(self): return self.render()
     def __init__(self, varkey, varname, vartype, *args, **kwargs):
         super().__init__(*args, linear=False, multiple=False, **kwargs)
         self.__vartype = vartype
@@ -112,9 +113,9 @@ class SourceVariable(Variable, ABC):
 class DependentVariable(Variable, ABC, vartyping=VariableTyping.DEPENDENT):
     def __init__(self, *args, function, **kwargs):
         super().__init__(*args, **kwargs)
-        signature = inspect.signature(function).parameters.items()
-        arguments = [key for key, value in signature if value.kind == value.POSITIONAL_ONLY and value.kind != value.VAR_POSITIONAL]
-        parameters = [key for key, value in signature if value.kind == value.KEYWORD_ONLY and value.kind != value.VAR_KEYWORD]
+        signature = list(inspect.signature(function).parameters.values())
+        arguments = [str(value) for value in signature if value.kind == value.POSITIONAL_OR_KEYWORD]
+        parameters = [str(value) for value in signature if value.kind == value.KEYWORD_ONLY]
         domain = Domain(arguments, parameters)
         self.__function = function
         self.__domain = domain
@@ -206,8 +207,6 @@ class EquationMeta(ABCMeta):
             variable.varvalue = value
         return variables
 
-    @property
-    def equations(cls): return cls.__equations__
     @property
     def proxys(cls): return cls.__proxys__
 
