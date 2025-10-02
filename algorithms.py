@@ -58,10 +58,9 @@ class ArrayAlgorithm(Algorithm):
 class TableAlgorithm(Algorithm):
     @staticmethod
     def algorithm(calculation, arguments, parameters, *args, **kwargs):
-        assert all([isinstance(argument, pd.Series) for argument in arguments])
+        assert all([isinstance(argument, (pd.Series, np.ndarray, np.number)) for argument in arguments])
         assert not any([isinstance(parameter, pd.Series) for parameter in parameters])
-        function = lambda dataframe, **constants: calculation(dataframe, constants)
-        return pd.concat(arguments, axis=1).apply(function, axis=1, **parameters)
+        return calculation(arguments, parameters)
 
 
 

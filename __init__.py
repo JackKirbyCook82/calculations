@@ -14,13 +14,13 @@ MODULE = os.path.dirname(os.path.realpath(__file__))
 if MODULE not in sys.path: sys.path.append(MODULE)
 
 from algorithms import NumericAlgorithm, IntegralAlgorithm, VectorAlgorithm, ArrayAlgorithm, TableAlgorithm
-from equations import Equation, ConstantVariable, IndependentVariable, DependentVariable
+from equations import Equation, ConstantVariable, IndependentVariable, DependentVariable, DomainError
 from computations import ArrayComputation, TableComputation
 from support.concepts import Assembly
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["Variables", "Equations"]
+__all__ = ["Variables", "Equations", "DomainError"]
 __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 

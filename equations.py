@@ -19,14 +19,12 @@ from support.trees import Node
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["Equation", "DependentVariable", "IndependentVariable", "ConstantVariable"]
+__all__ = ["Equation", "DependentVariable", "IndependentVariable", "ConstantVariable", "DomainError"]
 __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-VarTyping = StrEnum("VarTyping", ["CONSTANT", "INDEPENDENT", "DEPENDENT"])
-
-
+VariableTyping = StrEnum("VariableTyping", ["CONSTANT", "INDEPENDENT", "DEPENDENT"])
 class Proxy(object):
     def __init__(self, variable, arguments, parameters):
         assert isinstance(arguments, tuple) and isinstance(parameters, dict)
@@ -60,6 +58,7 @@ class Deferred(object):
     def vartyping(self): return self.variable.vartyping
 
 
+class DomainError(Exception): pass
 class Domain(ntuple("Domain", "arguments parameters")):
     def __iter__(self): return chain(self.arguments, self.parameters)
 
@@ -83,7 +82,8 @@ class Variable(Node, ABC):
     def sources(self):
         children = self.children.values()
         if bool(self): generator = iter([self])
-        else: generator = (variable for child in children for variable in child.sources)
+        elif bool(self.terminal): generator = iter([self])
+        else: generator = (source for child in children for source in child.sources)
         yield from generator
 
     @property
@@ -109,12 +109,12 @@ class SourceVariable(Variable, ABC):
 
 
 @Deferred
-class DependentVariable(Variable, ABC, vartyping=VarTyping.CONSTANT):
+class DependentVariable(Variable, ABC, vartyping=VariableTyping.DEPENDENT):
     def __init__(self, *args, function, **kwargs):
         super().__init__(*args, **kwargs)
         signature = inspect.signature(function).parameters.items()
-        arguments = [key for key, value in signature if value.kind != value.KEYWORD_ONLY]
-        parameters = [key for key, value in signature if value.kind == value.KEYWORD_ONLY]
+        arguments = [key for key, value in signature if value.kind == value.POSITIONAL_ONLY and value.kind != value.VAR_POSITIONAL]
+        parameters = [key for key, value in signature if value.kind == value.KEYWORD_ONLY and value.kind != value.VAR_KEYWORD]
         domain = Domain(arguments, parameters)
         self.__function = function
         self.__domain = domain
@@ -138,14 +138,14 @@ class DependentVariable(Variable, ABC, vartyping=VarTyping.CONSTANT):
 
 
 @Deferred
-class IndependentVariable(SourceVariable, ABC, vartyping=VarTyping.INDEPENDENT):
+class IndependentVariable(SourceVariable, ABC, vartyping=VariableTyping.INDEPENDENT):
     def calculation(self, order):
         argument = order.index(self)
         wrapper = lambda arguments, parameters: arguments[argument]
         return wrapper
 
 @Deferred
-class ConstantVariable(SourceVariable, ABC, vartyping=VarTyping.DEPENDENT):
+class ConstantVariable(SourceVariable, ABC, vartyping=VariableTyping.CONSTANT):
     def calculation(self, order):
         parameter = str(self.varkey)
         wrapper = lambda arguments, parameters: parameters[parameter]
@@ -196,16 +196,19 @@ class EquationMeta(ABCMeta):
     @staticmethod
     def populate(variables, arguments, parameters):
         locate = lambda sources, locator: sources.get(locator, {})
-        function = lambda sources, locator, *locators: function(locate(sources, locator)) if bool(locators) else locate(sources, locator)
+        function = lambda sources, locator, *locators: function(locate(sources, locator), *locators) if bool(locators) else locate(sources, locator)
         assert isinstance(variables, dict)
         for variable in variables.values():
-            if variable.vartyping is VarTyping.DEPENDENT: continue
-            elif variable.vartyping is VarTyping.INDEPENDENT: value = function(arguments, *variable.locator)
-            elif variable.vartyping is VarTyping.CONSTANT: value = function(parameters, *variable.locator)
+            if variable.vartyping is VariableTyping.DEPENDENT: continue
+            elif variable.vartyping is VariableTyping.INDEPENDENT: value = function(arguments, *variable.locator)
+            elif variable.vartyping is VariableTyping.CONSTANT: value = function(parameters, *variable.locator)
             else: raise ValueError(variable.vartyping)
             variable.varvalue = value
         return variables
 
+    @property
+    def equations(cls): return cls.__equations__
+    @property
     def proxys(cls): return cls.__proxys__
 
 
@@ -233,8 +236,9 @@ class Equation(ABC, metaclass=EquationMeta):
 
     def calculation(self, variable):
         sources = list(set(variable.sources))
-        arguments = ODict([(source, source.varvalue) for source in sources if source.vartyping is VarTyping.INDEPENDENT])
-        parameters = ODict([(source, source.varvalue) for source in sources if source.vartyping is VarTyping.CONSTANT])
+        if not all([bool(source) for source in sources]): raise DomainError()
+        arguments = ODict([(source, source.varvalue) for source in sources if source.vartyping is VariableTyping.INDEPENDENT])
+        parameters = ODict([(source, source.varvalue) for source in sources if source.vartyping is VariableTyping.CONSTANT])
         parameters = {str(variable.varkey): value for variable, value in parameters.items()}
         order = list(arguments.keys())
         arguments = list(arguments.values())
