@@ -68,7 +68,6 @@ class Variable(Node, ABC):
         cls.vartyping = kwargs.get("vartyping", getattr(cls, "vartyping", None))
 
     def __bool__(self): return bool(self.varvalue is not None)
-    def __str__(self): return self.render()
     def __init__(self, varkey, varname, vartype, *args, **kwargs):
         super().__init__(*args, linear=False, multiple=False, **kwargs)
         self.__vartype = vartype

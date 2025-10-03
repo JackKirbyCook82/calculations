@@ -13,7 +13,7 @@ from abc import ABC
 MODULE = os.path.dirname(os.path.realpath(__file__))
 if MODULE not in sys.path: sys.path.append(MODULE)
 
-from algorithms import NumericAlgorithm, IntegralAlgorithm, VectorAlgorithm, ArrayAlgorithm, TableAlgorithm
+from algorithms import NumericAlgorithm, IntegralAlgorithm, VectorizedArrayAlgorithm, VectorizedTableAlgorithm, UnVectorizedArrayAlgorithm, UnVectorizedTableAlgorithm
 from equations import Equation, ConstantVariable, IndependentVariable, DependentVariable, DomainError
 from computations import ArrayComputation, TableComputation
 from support.concepts import Assembly
@@ -25,15 +25,20 @@ __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class NumericEquation(NumericAlgorithm, Equation, ABC): pass
+class VectorizedArrayEquation(ArrayComputation, VectorizedArrayAlgorithm, Equation, ABC): pass
+class VectorizedTableEquation(TableComputation, VectorizedTableAlgorithm, Equation, ABC): pass
+class UnVectorizedArrayEquation(ArrayComputation, UnVectorizedArrayAlgorithm, Equation, ABC): pass
+class UnVectorizedTableEquation(TableComputation, UnVectorizedTableAlgorithm, Equation, ABC): pass
 class IntegralEquation(IntegralAlgorithm, Equation, ABC): pass
-class VectorEquation(ArrayComputation, VectorAlgorithm, Equation, ABC): pass
-class ArrayEquation(ArrayComputation, ArrayAlgorithm, Equation, ABC): pass
-class TableEquation(TableComputation, TableAlgorithm, Equation, ABC): pass
+class NumericEquation(NumericAlgorithm, Equation, ABC): pass
 
-
-class Equations(Assembly): Numeric, Integral, Vector, Array, Table = NumericEquation, IntegralEquation, VectorEquation, ArrayEquation, TableEquation
 class Variables(Assembly): Constant, Independent, Dependent = ConstantVariable, IndependentVariable, DependentVariable
+class Equations(Assembly):
+    class UnVectorized(Assembly): Array, Table = UnVectorizedArrayEquation, UnVectorizedTableEquation
+    class Vectorized(Assembly): Array, Table = VectorizedArrayEquation, VectorizedTableEquation
+    class Calculus(Assembly): Integral = IntegralEquation
+    class Algebra(Assembly): Numeric = NumericEquation
+
 
 
 
