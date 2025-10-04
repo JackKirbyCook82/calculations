@@ -69,7 +69,7 @@ class Variable(Node, ABC):
 
     def __bool__(self): return bool(self.varvalue is not None)
     def __init__(self, varkey, varname, vartype, *args, **kwargs):
-        super().__init__(*args, linear=False, multiple=False, **kwargs)
+        super().__init__(varkey, *args, **kwargs)
         self.__vartype = vartype
         self.__varname = varname
         self.__varkey = varkey
@@ -121,7 +121,7 @@ class DependentVariable(Variable, ABC, vartyping=VariableTyping.DEPENDENT):
 
     def calculation(self, order):
         children = list(self.children.items())
-        if bool(self): wrapper = lambda arguments, parameters: self.varvalue
+        if bool(self): wrapper = lambda arguments, parameters: arguments[order.index(self)]
         else:
             primary = [variable.calculation(order) for key, variable in children if key in self.domain.arguments]
             secondary = {key: variable.calculation(order) for key, variable in children if key in self.domain.parameters}
@@ -140,15 +140,13 @@ class DependentVariable(Variable, ABC, vartyping=VariableTyping.DEPENDENT):
 @Deferred
 class IndependentVariable(SourceVariable, ABC, vartyping=VariableTyping.INDEPENDENT):
     def calculation(self, order):
-        argument = order.index(self)
-        wrapper = lambda arguments, parameters: arguments[argument]
+        wrapper = lambda arguments, parameters: arguments[order.index(self)]
         return wrapper
 
 @Deferred
 class ConstantVariable(SourceVariable, ABC, vartyping=VariableTyping.CONSTANT):
     def calculation(self, order):
-        parameter = str(self.varkey)
-        wrapper = lambda arguments, parameters: parameters[parameter]
+        wrapper = lambda arguments, parameters: parameters[str(self.varkey)]
         return wrapper
 
 
@@ -235,7 +233,7 @@ class Equation(ABC, metaclass=EquationMeta):
     def calculation(self, variable):
         sources = list(set(variable.sources))
         if not all([bool(source) for source in sources]): raise DomainError()
-        arguments = ODict([(source, source.varvalue) for source in sources if source.vartyping is VariableTyping.INDEPENDENT])
+        arguments = ODict([(source, source.varvalue) for source in sources if source.vartyping in (VariableTyping.INDEPENDENT, VariableTyping.DEPENDENT)])
         parameters = ODict([(source, source.varvalue) for source in sources if source.vartyping is VariableTyping.CONSTANT])
         parameters = {str(variable.varkey): value for variable, value in parameters.items()}
         order = list(arguments.keys())
