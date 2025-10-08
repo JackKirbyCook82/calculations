@@ -6,8 +6,11 @@ Created on Tues Aug 12 2025
 
 """
 
+import types
 import inspect
 import regex as re
+import pandas as pd
+import xarray as xr
 from enum import StrEnum
 from itertools import chain
 from functools import reduce, wraps
@@ -15,11 +18,13 @@ from abc import ABC, ABCMeta, abstractmethod
 from collections import namedtuple as ntuple
 from collections import OrderedDict as ODict
 
+from support.decorators import Dispatchers
+from support.meta import AttributeMeta
 from support.trees import Node
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["Equation", "DependentVariable", "IndependentVariable", "ConstantVariable", "DomainError"]
+__all__ = ["Equation", "DependentVariable", "IndependentVariable", "ConstantVariable", "VariableError"]
 __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -58,9 +63,12 @@ class Deferred(object):
     def vartyping(self): return self.variable.vartyping
 
 
-class DomainError(Exception): pass
 class Domain(ntuple("Domain", "arguments parameters")):
     def __iter__(self): return chain(self.arguments, self.parameters)
+
+
+class VariableError(Exception, metaclass=AttributeMeta): pass
+class VariableDomainError(VariableError, attribute="Domain"): pass
 
 
 class Variable(Node, ABC):
@@ -138,16 +146,33 @@ class DependentVariable(Variable, ABC, vartyping=VariableTyping.DEPENDENT):
 
 
 @Deferred
-class IndependentVariable(SourceVariable, ABC, vartyping=VariableTyping.INDEPENDENT):
+class IndependentVariable(Variable, ABC, vartyping=VariableTyping.INDEPENDENT):
+    def __init__(self, *args, locator, **kwargs):
+        super().__init__(*args, **kwargs)
+        locator = locator if isinstance(locator, tuple) else tuple([locator])
+        self.__locator = locator
+
     def calculation(self, order):
         wrapper = lambda arguments, parameters: arguments[order.index(self)]
         return wrapper
 
+    @property
+    def locator(self): return self.__locator
+
+
 @Deferred
-class ConstantVariable(SourceVariable, ABC, vartyping=VariableTyping.CONSTANT):
+class ConstantVariable(Variable, ABC, vartyping=VariableTyping.CONSTANT):
+    def __init__(self, *args, locator, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert isinstance(locator, str)
+        self.__locator = locator
+
     def calculation(self, order):
         wrapper = lambda arguments, parameters: parameters[str(self.varkey)]
         return wrapper
+
+    @property
+    def locator(self): return self.__locator
 
 
 class EquationMeta(ABCMeta):
@@ -182,6 +207,25 @@ class EquationMeta(ABCMeta):
         variables = cls.populate(variables, arguments, parameters)
         return super(EquationMeta, cls).__call__(variables, *args, **kwargs)
 
+    def populate(cls, variables, arguments, parameters):
+        assert isinstance(variables, dict)
+        for variable in variables.values():
+            if variable.vartyping is VariableTyping.DEPENDENT: continue
+            elif variable.vartyping is VariableTyping.INDEPENDENT: value = cls.locate(arguments, *variable.locator)
+            elif variable.vartyping is VariableTyping.CONSTANT: value = parameters.get(variable.locator, None)
+            else: raise ValueError(variable.vartyping)
+            variable.varvalue = value
+        return variables
+
+    @Dispatchers.Type(locator=0)
+    def locate(cls, sources, locator, *locators): raise TypeError(type(sources))
+    @locate.register(xr.Dataset, pd.DataFrame)
+    def table(cls, sources, locator, *locators): return sources.get(locator, None)
+    @locate.register(dict)
+    def mapping(cls, sources, locator, *locators): return cls.locate(sources.get(locator, None), *locators)
+    @locate.register(types.NoneType)
+    def empty(cls, sources, locator, *locators): return None
+
     @staticmethod
     def connect(variables):
         assert isinstance(variables, dict)
@@ -189,19 +233,6 @@ class EquationMeta(ABCMeta):
             try: domain = list(variable.domain)
             except AttributeError: continue
             for key in domain: variable[key] = variables[key]
-        return variables
-
-    @staticmethod
-    def populate(variables, arguments, parameters):
-        locate = lambda sources, locator: sources.get(locator, {})
-        function = lambda sources, locator, *locators: function(locate(sources, locator), *locators) if bool(locators) else locate(sources, locator)
-        assert isinstance(variables, dict)
-        for variable in variables.values():
-            if variable.vartyping is VariableTyping.DEPENDENT: continue
-            elif variable.vartyping is VariableTyping.INDEPENDENT: value = function(arguments, *variable.locator)
-            elif variable.vartyping is VariableTyping.CONSTANT: value = function(parameters, *variable.locator)
-            else: raise ValueError(variable.vartyping)
-            variable.varvalue = value
         return variables
 
     @property
@@ -232,7 +263,7 @@ class Equation(ABC, metaclass=EquationMeta):
 
     def calculation(self, variable):
         sources = list(set(variable.sources))
-        if not all([bool(source) for source in sources]): raise DomainError()
+        if not all([bool(source) for source in sources]): raise VariableError.Domain()
         arguments = ODict([(source, source.varvalue) for source in sources if source.vartyping in (VariableTyping.INDEPENDENT, VariableTyping.DEPENDENT)])
         parameters = ODict([(source, source.varvalue) for source in sources if source.vartyping is VariableTyping.CONSTANT])
         parameters = {str(variable.varkey): value for variable, value in parameters.items()}

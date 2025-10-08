@@ -14,13 +14,13 @@ MODULE = os.path.dirname(os.path.realpath(__file__))
 if MODULE not in sys.path: sys.path.append(MODULE)
 
 from algorithms import NumericAlgorithm, IntegralAlgorithm, VectorizedArrayAlgorithm, VectorizedTableAlgorithm, UnVectorizedArrayAlgorithm, UnVectorizedTableAlgorithm
-from equations import Equation, ConstantVariable, IndependentVariable, DependentVariable, DomainError
+from equations import Equation, ConstantVariable, IndependentVariable, DependentVariable, VariableError
 from computations import ArrayComputation, TableComputation
 from support.concepts import Assembly
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["Variables", "Equations", "DomainError"]
+__all__ = ["Variables", "Equations", "Errors"]
 __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -33,6 +33,7 @@ class IntegralEquation(IntegralAlgorithm, Equation, ABC): pass
 class NumericEquation(NumericAlgorithm, Equation, ABC): pass
 
 class Variables(Assembly): Constant, Independent, Dependent = ConstantVariable, IndependentVariable, DependentVariable
+class Errors(Assembly): Domain = VariableError.Domain
 class Equations(Assembly):
     class UnVectorized(Assembly): Array, Table = UnVectorizedArrayEquation, UnVectorizedTableEquation
     class Vectorized(Assembly): Array, Table = VectorizedArrayEquation, VectorizedTableEquation
