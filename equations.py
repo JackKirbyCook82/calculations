@@ -241,10 +241,8 @@ class Equation(ABC, metaclass=EquationMeta):
         if attribute not in variables.keys(): raise AttributeError(attribute)
         variable = variables[attribute]
         if variable.terminal:
-###
-###         ACCOUNT FOR EMPTY VARIABLE, RAISE VariableDomainError
+            if not bool(variable): raise VariableError.Domain()
             return lambda: (variable.varname, variable.varvalue)
-###
         calculation = self.calculation(variable)
         return calculation
 
