@@ -106,16 +106,6 @@ class Variable(Node, ABC):
     def varvalue(self, value): self.__varvalue = value
 
 
-class SourceVariable(Variable, ABC):
-    def __init__(self, *args, locator, **kwargs):
-        super().__init__(*args, **kwargs)
-        locator = locator if isinstance(locator, tuple) else tuple([locator])
-        self.__locator = locator
-
-    @property
-    def locator(self): return self.__locator
-
-
 @Deferred
 class DependentVariable(Variable, ABC, vartyping=VariableTyping.DEPENDENT):
     def __init__(self, *args, function, **kwargs):
@@ -248,10 +238,13 @@ class Equation(ABC, metaclass=EquationMeta):
 
     def __getattr__(self, attribute):
         variables = {key: variable for key, variable in self.variables.items()}
-        if attribute not in variables.keys():
-            raise AttributeError(attribute)
+        if attribute not in variables.keys(): raise AttributeError(attribute)
         variable = variables[attribute]
-        if variable.terminal: return lambda: (variable.varname, variable.varvalue)
+        if variable.terminal:
+###
+###         ACCOUNT FOR EMPTY VARIABLE, RAISE VariableDomainError
+            return lambda: (variable.varname, variable.varvalue)
+###
         calculation = self.calculation(variable)
         return calculation
 
