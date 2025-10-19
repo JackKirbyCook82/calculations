@@ -13,7 +13,7 @@ from abc import ABC
 MODULE = os.path.dirname(os.path.realpath(__file__))
 if MODULE not in sys.path: sys.path.append(MODULE)
 
-from algorithms import NumericAlgorithm, IntegralAlgorithm, VectorizedArrayAlgorithm, VectorizedTableAlgorithm, UnVectorizedArrayAlgorithm, UnVectorizedTableAlgorithm
+from algorithms import NumericAlgorithm, VectorizedArrayAlgorithm, VectorizedTableAlgorithm, UnVectorizedArrayAlgorithm, UnVectorizedTableAlgorithm
 from equations import Equation, ConstantVariable, IndependentVariable, DependentVariable, VariableError
 from computations import ArrayComputation, TableComputation
 from support.concepts import Assembly
@@ -29,7 +29,6 @@ class VectorizedArrayEquation(ArrayComputation, VectorizedArrayAlgorithm, Equati
 class VectorizedTableEquation(TableComputation, VectorizedTableAlgorithm, Equation, ABC): pass
 class UnVectorizedArrayEquation(ArrayComputation, UnVectorizedArrayAlgorithm, Equation, ABC): pass
 class UnVectorizedTableEquation(TableComputation, UnVectorizedTableAlgorithm, Equation, ABC): pass
-class IntegralEquation(IntegralAlgorithm, Equation, ABC): pass
 class NumericEquation(NumericAlgorithm, Equation, ABC): pass
 
 class Variables(Assembly): Constant, Independent, Dependent = ConstantVariable, IndependentVariable, DependentVariable

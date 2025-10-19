@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["NumericAlgorithm", "IntegralAlgorithm", "VectorizedArrayAlgorithm", "VectorizedTableAlgorithm", "UnVectorizedArrayAlgorithm", "UnVectorizedTableAlgorithm"]
+__all__ = ["NumericAlgorithm", "VectorizedArrayAlgorithm", "VectorizedTableAlgorithm", "UnVectorizedArrayAlgorithm", "UnVectorizedTableAlgorithm"]
 __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -30,12 +30,6 @@ class NumericAlgorithm(Algorithm):
         assert all([isinstance(argument, np.number) for argument in arguments])
         assert not any([isinstance(parameter, np.number) for parameter in parameters])
         return calculation(arguments, parameters)
-
-
-class IntegralAlgorithm(Algorithm):
-    @staticmethod
-    def algorithm(calculation, arguments, parameters, *args, **kwargs):
-        pass
 
 
 class VectorizedArrayAlgorithm(Algorithm):
