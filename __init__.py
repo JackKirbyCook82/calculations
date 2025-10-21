@@ -14,7 +14,7 @@ MODULE = os.path.dirname(os.path.realpath(__file__))
 if MODULE not in sys.path: sys.path.append(MODULE)
 
 from algorithms import NumericAlgorithm, VectorizedArrayAlgorithm, VectorizedTableAlgorithm, UnVectorizedArrayAlgorithm, UnVectorizedTableAlgorithm
-from equations import Equation, ConstantVariable, IndependentVariable, DependentVariable, VariableError
+from equations import Equation, Factor, VariableError
 from computations import ArrayComputation, TableComputation
 from support.concepts import Assembly
 
@@ -31,12 +31,12 @@ class UnVectorizedArrayEquation(ArrayComputation, UnVectorizedArrayAlgorithm, Eq
 class UnVectorizedTableEquation(TableComputation, UnVectorizedTableAlgorithm, Equation, ABC): pass
 class NumericEquation(NumericAlgorithm, Equation, ABC): pass
 
-class Variables(Assembly): Constant, Independent, Dependent = ConstantVariable, IndependentVariable, DependentVariable
-class Errors(Assembly): Domain = VariableError.Domain
+
+class Variables(Assembly): Dependent, Independent, Constant = Factor.Dependent, Factor.Independent, Factor.Constant
+class Errors(Assembly): Dependent, Independent, Constant, Source = VariableError.Dependent, VariableError.Independent, VariableError.Constant, VariableError.Source
 class Equations(Assembly):
     class UnVectorized(Assembly): Array, Table = UnVectorizedArrayEquation, UnVectorizedTableEquation
     class Vectorized(Assembly): Array, Table = VectorizedArrayEquation, VectorizedTableEquation
-    class Calculus(Assembly): Integral = IntegralEquation
     class Algebra(Assembly): Numeric = NumericEquation
 
 

@@ -21,12 +21,12 @@ __license__ = "MIT License"
 class Computation(ABC):
     @staticmethod
     @abstractmethod
-    def computation(contents, *args, **kwargs): pass
+    def computation(contents): pass
 
 
 class ArrayComputation(Computation):
     @staticmethod
-    def computation(contents, *args, **kwargs):
+    def computation(contents):
         assert isinstance(contents, dict)
         assert all([isinstance(content, (xr.DataArray, np.number)) for content in contents.values()])
         dataarrays = {name: content for name, content in contents.items() if isinstance(content, xr.DataArray)}
@@ -39,7 +39,7 @@ class ArrayComputation(Computation):
 
 class TableComputation(Computation):
     @staticmethod
-    def computation(contents, *args, **kwargs):
+    def computation(contents):
         assert isinstance(contents, dict)
         assert all([isinstance(content, (pd.Series, np.number)) for content in contents.values()])
         series = [content.rename(name) for name, content in contents.items() if isinstance(content, pd.Series)]

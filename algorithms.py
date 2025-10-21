@@ -21,48 +21,47 @@ __license__ = "MIT License"
 class Algorithm(ABC):
     @staticmethod
     @abstractmethod
-    def algorithm(calculation, arguments, parameters, *args, **kwargs): pass
+    def algorithm(calculation, arguments, parameters, /, vartype): pass
 
 
 class NumericAlgorithm(Algorithm):
     @staticmethod
-    def algorithm(calculation, arguments, parameters, *args, **kwargs):
+    def algorithm(calculation, arguments, parameters, /, vartype):
         assert all([isinstance(argument, np.number) for argument in arguments])
-        assert not any([isinstance(parameter, np.number) for parameter in parameters])
         return calculation(arguments, parameters)
 
 
 class VectorizedArrayAlgorithm(Algorithm):
     @staticmethod
-    def algorithm(calculation, arguments, parameters, *args, vartype, **kwargs):
+    def algorithm(calculation, arguments, parameters, /, vartype):
         assert all([isinstance(argument, (xr.DataArray, np.number)) for argument in arguments])
-        assert not any([isinstance(parameter, xr.DataArray) for parameter in parameters])
+        assert not any([isinstance(parameter, xr.DataArray) for parameter in parameters.values()])
         function = lambda *variables, **constants: calculation(variables, constants)
         return xr.apply_ufunc(function, *arguments, kwargs=parameters, output_dtypes=[vartype], vectorize=True)
 
 
 class VectorizedTableAlgorithm(Algorithm):
     @staticmethod
-    def algorithm(calculation, arguments, parameters, *args, vartype, **kwargs):
+    def algorithm(calculation, arguments, parameters, /, vartype):
         assert all([isinstance(argument, (pd.Series, np.number)) for argument in arguments])
-        assert not any([isinstance(parameter, pd.Series) for parameter in parameters])
+        assert not any([isinstance(parameter, pd.Series) for parameter in parameters.values()])
         function = lambda variables, **constants: calculation(variables, constants)
         return pd.concat(arguments, axis=1).apply(function, axis=1, raw=True, **parameters)
 
 
 class UnVectorizedArrayAlgorithm(Algorithm):
     @staticmethod
-    def algorithm(calculation, arguments, parameters, *args, **kwargs):
+    def algorithm(calculation, arguments, parameters, /, vartype):
         assert all([isinstance(argument, (xr.DataArray, np.ndarray, np.number)) for argument in arguments])
-        assert not any([isinstance(parameter, xr.DataArray) for parameter in parameters])
+        assert not any([isinstance(parameter, xr.DataArray) for parameter in parameters.values()])
         return calculation(arguments, parameters)
 
 
 class UnVectorizedTableAlgorithm(Algorithm):
     @staticmethod
-    def algorithm(calculation, arguments, parameters, *args, **kwargs):
+    def algorithm(calculation, arguments, parameters, /, vartype):
         assert all([isinstance(argument, (pd.Series, np.ndarray, np.number)) for argument in arguments])
-        assert not any([isinstance(parameter, pd.Series) for parameter in parameters])
+        assert not any([isinstance(parameter, pd.Series) for parameter in parameters.values()])
         return calculation(arguments, parameters)
 
 
