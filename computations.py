@@ -21,7 +21,7 @@ __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ComputationType(Enum): Array, Table = list(range(1))
+class ComputationType(Enum): Array, Table = list(range(2))
 class Computation(ABC, metaclass=RegistryMeta):
     Type = ComputationType
 

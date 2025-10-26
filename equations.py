@@ -18,8 +18,8 @@ from abc import ABC, ABCMeta, abstractmethod
 from collections import namedtuple as ntuple
 from collections import OrderedDict as ODict
 
+from support.meta import RegistryMeta, AttributeMeta
 from support.decorators import Dispatchers
-from support.meta import RegistryMeta
 from support.trees import Node
 
 __version__ = "1.0.0"
@@ -117,7 +117,7 @@ class IndependentVariable(SourceVariable, ABC, register=VariableType.INDEPENDENT
     def locate(self, arguments):
         locator = list(self.locator)
         content = self.find(arguments, *locator)
-        if isinstance(content, types.NoneType): raise Error[VariableType.INDEPENDENT]()
+        if isinstance(content, types.NoneType): raise Error.Independent()
         return content
 
     @Dispatchers.Type(locator=0)
@@ -138,15 +138,15 @@ class ConstantVariable(SourceVariable, ABC, register=VariableType.CONSTANT):
     def locate(self, parameters):
         assert isinstance(parameters, dict)
         content = parameters.get(self.locator, None)
-        if isinstance(content, types.NoneType): raise Error[VariableType.CONSTANT]()
+        if isinstance(content, types.NoneType): raise Error.Constant()
         return content
 
 
-class Error(Exception, metaclass=RegistryMeta): pass
-class DependentError(Error, register=VariableType.DEPENDENT): pass
-class IndependentError(Error, register=VariableType.INDEPENDENT): pass
-class ConstantError(Error, register=VariableType.CONSTANT): pass
-class SourceError(Error, register=VariableType.SOURCE): pass
+class Error(Exception, metaclass=AttributeMeta): pass
+class DependentError(Error, attribute=str(VariableType.DEPENDENT.name).title()): pass
+class IndependentError(Error, attribute=str(VariableType.INDEPENDENT.name).title()): pass
+class ConstantError(Error, attribute=str(VariableType.CONSTANT.name).title()): pass
+class SourceError(Error, attribute=str(VariableType.SOURCE.name).title()): pass
 
 
 class Factor(object, metaclass=RegistryMeta):
@@ -246,7 +246,7 @@ class Equation(ABC, metaclass=EquationMeta):
         def wrapper(arguments, **parameters):
             if isinstance(variable, IndependentVariable): return variable.locate(arguments)
             elif isinstance(variable, ConstantVariable): return variable.locate(parameters)
-            else: raise Error[VariableType.DEPENDENT]()
+            else: raise Error.Dependent()
         return wrapper
 
     def calculation(self, variable):

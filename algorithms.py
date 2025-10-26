@@ -21,7 +21,7 @@ __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class AlgorithmType(Enum): Numeric, Array, Table = list(range(2))
+class AlgorithmType(Enum): Numeric, Array, Table = list(range(3))
 class Algorithm(ABC, metaclass=RegistryMeta):
     Type = AlgorithmType
 
