@@ -21,54 +21,57 @@ __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class AlgorithmType(Enum): Numeric, Array, Table = list(range(3))
+class AlgorithmType(Enum): Array, Table = list(range(2))
+class AlgorithmError(Exception): pass
 class Algorithm(ABC, metaclass=RegistryMeta):
     Type = AlgorithmType
 
     @staticmethod
     @abstractmethod
-    def algorithm(calculation, arguments, parameters, /, vartype): pass
+    def enforcement(arguments, parameters): pass
+    @abstractmethod
+    def algorithm(self, calculation, arguments, parameters, *args, **kwargs): pass
 
 
-class NumericAlgorithm(Algorithm, register=(AlgorithmType.Numeric, False)):
+class TableEnforcement(ABC):
     @staticmethod
-    def algorithm(calculation, arguments, parameters, /, vartype):
-        assert all([isinstance(argument, np.number) for argument in arguments])
-        return calculation(arguments, parameters)
+    def enforcement(arguments, parameters):
+        if not all([isinstance(argument, (pd.Series, np.number)) for argument in arguments]):
+            raise Algorithm([type(argument) for argument in arguments])
+        if any([isinstance(parameter, (xr.Dataset, pd.Series)) for parameter in parameters.values()]):
+            raise Algorithm({key: type(parameter) for key, parameter in parameters.items()})
 
 
-class VectorizedArrayAlgorithm(Algorithm, register=(AlgorithmType.Array, True)):
+class ArrayEnforcement(ABC):
     @staticmethod
-    def algorithm(calculation, arguments, parameters, /, vartype):
-        assert all([isinstance(argument, (xr.DataArray, np.number)) for argument in arguments])
-        assert not any([isinstance(parameter, xr.DataArray) for parameter in parameters.values()])
+    def enforcement(arguments, parameters):
+        if not all([isinstance(argument, (xr.DataArray, np.number)) for argument in arguments]):
+            raise Algorithm([type(argument) for argument in arguments])
+        if any([isinstance(parameter, (xr.Dataset, pd.Series)) for parameter in parameters.values()]):
+            raise Algorithm({key: type(parameter) for key, parameter in parameters.items()})
+
+
+class VectorizedArrayAlgorithm(ArrayEnforcement, Algorithm, register=(AlgorithmType.Array, True)):
+    def algorithm(self, calculation, arguments, parameters, *args, vartype, **kwargs):
+        self.enforcement(arguments, parameters)
         function = lambda *variables, **constants: calculation(variables, constants)
         return xr.apply_ufunc(function, *arguments, kwargs=parameters, output_dtypes=[vartype], vectorize=True)
 
 
-class VectorizedTableAlgorithm(Algorithm, register=(AlgorithmType.Table, True)):
-    @staticmethod
-    def algorithm(calculation, arguments, parameters, /, vartype):
-        assert all([isinstance(argument, (pd.Series, np.number)) for argument in arguments])
-        assert not any([isinstance(parameter, pd.Series) for parameter in parameters.values()])
+class VectorizedTableAlgorithm(TableEnforcement, Algorithm, register=Algorithm.Table, True):
+    def algorithm(self, calculation, arguments, parameters, *args, **kwargs):
+        self.enforcement(arguments, parameters)
         function = lambda variables, **constants: calculation(variables, constants)
         return pd.concat(arguments, axis=1).apply(function, axis=1, raw=True, **parameters)
 
 
-class UnVectorizedArrayAlgorithm(Algorithm, register=(AlgorithmType.Array, False)):
-    @staticmethod
-    def algorithm(calculation, arguments, parameters, /, vartype):
-        assert all([isinstance(argument, (xr.DataArray, np.ndarray, np.number)) for argument in arguments])
-        assert not any([isinstance(parameter, xr.DataArray) for parameter in parameters.values()])
+class UnVectorizedAlgorithm(Algorithm, ABC):
+    def algorithm(self, calculation, arguments, parameters, *args, **kwargs):
+        self.enforcement(arguments, parameters)
         return calculation(arguments, parameters)
 
 
-class UnVectorizedTableAlgorithm(Algorithm, register=(AlgorithmType.Table, False)):
-    @staticmethod
-    def algorithm(calculation, arguments, parameters, /, vartype):
-        assert all([isinstance(argument, (pd.Series, np.ndarray, np.number)) for argument in arguments])
-        assert not any([isinstance(parameter, pd.Series) for parameter in parameters.values()])
-        return calculation(arguments, parameters)
-
+class UnVectorizedArrayAlgorithm(ArrayEnforcement, UnVectorizedAlgorithm, register=(AlgorithmType.Array, False)): pass
+class UnVectorizedTableAlgorithm(TableEnforcement, UnVectorizedAlgorithm, register=(AlgorithmType.Table, False)): pass
 
 

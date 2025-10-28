@@ -40,7 +40,6 @@ class Algorithms(Assembly):
     class UnVectorized(Assembly):
         Array = Algorithm[Algorithm.Type.Array, False]
         Table = Algorithm[Algorithm.Type.Table, False]
-        Numeric = Algorithm[Algorithm.Type.Numeric, False]
 
 class Errors(Assembly):
     Dependent = Error.Dependent
