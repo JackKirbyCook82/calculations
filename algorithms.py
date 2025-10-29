@@ -58,7 +58,7 @@ class VectorizedArrayAlgorithm(ArrayEnforcement, Algorithm, register=(AlgorithmT
         return xr.apply_ufunc(function, *arguments, kwargs=parameters, output_dtypes=[vartype], vectorize=True)
 
 
-class VectorizedTableAlgorithm(TableEnforcement, Algorithm, register=Algorithm.Table, True):
+class VectorizedTableAlgorithm(TableEnforcement, Algorithm, register=(AlgorithmType.Table, True)):
     def algorithm(self, calculation, arguments, parameters, *args, **kwargs):
         self.enforcement(arguments, parameters)
         function = lambda variables, **constants: calculation(variables, constants)

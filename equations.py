@@ -191,7 +191,7 @@ class EquationMeta(RegistryMeta, ABCMeta):
         updated = {key: value for key, value in attrs.items() if isinstance(value, Factor)}
         cls.__factors__ = dict(existing) | dict(updated)
 
-    def __add__(cls, others):
+    def __and__(cls, others):
         assert isinstance(others, list) or issubclass(others, Equation)
         assert all([issubclass(other, Equation) for other in others]) if isinstance(others, list) else True
         split = lambda string: re.findall(r'[A-Z][a-z]*', str(string).replace("Equation", ""))
