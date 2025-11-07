@@ -65,8 +65,10 @@ class Variable(Node, ABC, metaclass=RegistryMeta):
 class DependentVariable(Variable, ABC, register=VariableType.DEPENDENT):
     def __init__(self, *args, function, **kwargs):
         super().__init__(*args, **kwargs)
-        signature = list(inspect.signature(function).parameters.values())
-        arguments = [str(value) for value in signature if value.kind == value.POSITIONAL_OR_KEYWORD]
+        try: signature = inspect.signature(function)
+        except (TypeError, ValueError): signature = inspect.signature(function.__call__)
+        signature = list(signature.parameters.values())
+        arguments = [str(value) for value in signature if value.kind == value.POSITIONAL_OR_KEYWORD and str(value.name) not in ("self", "cls")]
         parameters = [str(value) for value in signature if value.kind == value.KEYWORD_ONLY]
         self.__domain = Domain(arguments, parameters)
         self.__function = function
