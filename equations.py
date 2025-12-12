@@ -8,7 +8,6 @@ Created on Tues Aug 12 2025
 
 import types
 import inspect
-import regex as re
 import pandas as pd
 import xarray as xr
 from enum import Enum
@@ -18,13 +17,13 @@ from abc import ABC, ABCMeta, abstractmethod
 from collections import namedtuple as ntuple
 from collections import OrderedDict as ODict
 
-from support.meta import RegistryMeta, AttributeMeta
 from support.decorators import Dispatchers
+from support.concepts import Assembly
 from support.trees import Node
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["Equation", "Factor", "Error", "Variable"]
+__all__ = ["Equation", "Variables", "Errors", "Factor"]
 __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -34,7 +33,7 @@ class Domain(ntuple("Domain", "arguments parameters")):
 
 
 class VariableType(Enum): DEPENDENT, INDEPENDENT, CONSTANT, SOURCE = list(range(4))
-class Variable(Node, ABC, metaclass=RegistryMeta):
+class Variable(Node, ABC):
     Type = VariableType
 
     def __repr__(self): return f"{self.__class__.__name__}({self.varkey}, {self.varname})"
@@ -62,7 +61,7 @@ class Variable(Node, ABC, metaclass=RegistryMeta):
     def varkey(self): return self.__varkey
 
 
-class DependentVariable(Variable, ABC, register=VariableType.DEPENDENT):
+class DependentVariable(Variable, ABC):
     def __init__(self, *args, function, **kwargs):
         super().__init__(*args, **kwargs)
         try: signature = inspect.signature(function)
@@ -92,7 +91,7 @@ class DependentVariable(Variable, ABC, register=VariableType.DEPENDENT):
     def domain(self): return self.__domain
 
 
-class SourceVariable(Variable, ABC, register=VariableType.SOURCE):
+class SourceVariable(Variable, ABC):
     def __init__(self, *args, locator, **kwargs):
         super().__init__(*args, **kwargs)
         self.__locator = locator
@@ -111,7 +110,7 @@ class SourceVariable(Variable, ABC, register=VariableType.SOURCE):
     def locator(self): return self.__locator
 
 
-class IndependentVariable(SourceVariable, ABC, register=VariableType.INDEPENDENT):
+class IndependentVariable(SourceVariable, ABC):
     def __init__(self, *args, locator, **kwargs):
         locator = locator if isinstance(locator, tuple) else tuple([locator])
         super().__init__(*args, locator=locator, **kwargs)
@@ -132,7 +131,7 @@ class IndependentVariable(SourceVariable, ABC, register=VariableType.INDEPENDENT
     def empty(self, arguments, locator, *locators): return None
 
 
-class ConstantVariable(SourceVariable, ABC, register=VariableType.CONSTANT):
+class ConstantVariable(SourceVariable, ABC):
     def __init__(self, *args, locator, **kwargs):
         assert isinstance(locator, str)
         super().__init__(*args, locator=locator, **kwargs)
@@ -144,14 +143,14 @@ class ConstantVariable(SourceVariable, ABC, register=VariableType.CONSTANT):
         return content
 
 
-class Error(Exception, metaclass=AttributeMeta): pass
-class DependentError(Error, attribute=str(VariableType.DEPENDENT.name).title()): pass
-class IndependentError(Error, attribute=str(VariableType.INDEPENDENT.name).title()): pass
-class ConstantError(Error, attribute=str(VariableType.CONSTANT.name).title()): pass
-class SourceError(Error, attribute=str(VariableType.SOURCE.name).title()): pass
+class Error(Exception): pass
+class DependentError(Error): pass
+class IndependentError(Error): pass
+class ConstantError(Error): pass
+class SourceError(Error): pass
 
 
-class Factor(object, metaclass=RegistryMeta):
+class Factor(object):
     def __init_subclass__(cls, *args, variable, **kwargs):
         cls.__variable__ = variable
 
@@ -174,12 +173,12 @@ class Factor(object, metaclass=RegistryMeta):
     def arguments(self): return self.__arguments
 
 
-class DependentFactor(Factor, variable=DependentVariable, register=VariableType.DEPENDENT): pass
-class IndependentFactor(Factor, variable=IndependentVariable, register=VariableType.INDEPENDENT): pass
-class ConstantFactor(Factor, variable=ConstantVariable, register=VariableType.CONSTANT): pass
+class DependentFactor(Factor, variable=DependentVariable): pass
+class IndependentFactor(Factor, variable=IndependentVariable): pass
+class ConstantFactor(Factor, variable=ConstantVariable): pass
 
 
-class EquationMeta(RegistryMeta, ABCMeta):
+class EquationMeta(ABCMeta):
     def __new__(mcs, name, bases, attrs, *args, **kwargs):
         exclude = [key for key, value in attrs.items() if isinstance(value, Factor)]
         attrs = {key: value for key, value in attrs.items() if key not in exclude}
@@ -192,16 +191,6 @@ class EquationMeta(RegistryMeta, ABCMeta):
         existing = reduce(lambda lead, lag: lead | lag, existing, dict())
         updated = {key: value for key, value in attrs.items() if isinstance(value, Factor)}
         cls.__factors__ = dict(existing) | dict(updated)
-
-    def __and__(cls, others):
-        assert isinstance(others, list) or issubclass(others, Equation)
-        assert all([issubclass(other, Equation) for other in others]) if isinstance(others, list) else True
-        split = lambda string: re.findall(r'[A-Z][a-z]*', str(string).replace("Equation", ""))
-        bases = (others if isinstance(others, list) else [others]) + [cls]
-        names = list(chain(*[split(base.__name__) for base in bases]))
-        name = "".join(list(dict.fromkeys(names))) + "Equation"
-        equation = EquationMeta(str(name), tuple(bases), dict())
-        return equation
 
     def __call__(cls, *args, **kwargs):
         variables = [factor(*args, **kwargs) for key, factor in cls.factors.items()]
@@ -217,7 +206,7 @@ class EquationMeta(RegistryMeta, ABCMeta):
     def factors(cls): return cls.__factors__
 
 
-class Equation(ABC, metaclass=EquationMeta):
+class Equation(ABC):
     def __init_subclass__(cls, *args, **kwargs): pass
     def __init__(self, variables, *args, **kwargs):
         assert isinstance(variables, dict)
@@ -279,5 +268,18 @@ class Equation(ABC, metaclass=EquationMeta):
 
     @property
     def variables(self): return self.__variables
+
+
+class Variables(Assembly):
+    Dependent = DependentFactor
+    Independent = IndependentFactor
+    Constant = ConstantFactor
+
+class Errors(Assembly):
+    Dependent = DependentError
+    Independent = IndependentError
+    Constant = ConstantError
+    Source = SourceError
+
 
 

@@ -9,23 +9,19 @@ Created on Thurs Aug 14 2025
 import numpy as np
 import pandas as pd
 import xarray as xr
-from enum import Enum
 from abc import ABC, abstractmethod
 
-from support.meta import RegistryMeta
+from support.concepts import Assembly
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["Algorithm"]
+__all__ = ["Algorithms"]
 __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class AlgorithmType(Enum): Array, Table = list(range(2))
 class AlgorithmError(Exception): pass
-class Algorithm(ABC, metaclass=RegistryMeta):
-    Type = AlgorithmType
-
+class Algorithm(ABC):
     @staticmethod
     @abstractmethod
     def enforcement(arguments, parameters): pass
@@ -51,14 +47,14 @@ class ArrayEnforcement(ABC):
             raise Algorithm({key: type(parameter) for key, parameter in parameters.items()})
 
 
-class VectorizedArrayAlgorithm(ArrayEnforcement, Algorithm, register=(AlgorithmType.Array, True)):
+class VectorizedArrayAlgorithm(ArrayEnforcement, Algorithm):
     def algorithm(self, calculation, arguments, parameters, *args, vartype, **kwargs):
         self.enforcement(arguments, parameters)
         function = lambda *variables, **constants: calculation(variables, constants)
         return xr.apply_ufunc(function, *arguments, kwargs=parameters, output_dtypes=[vartype], vectorize=True)
 
 
-class VectorizedTableAlgorithm(TableEnforcement, Algorithm, register=(AlgorithmType.Table, True)):
+class VectorizedTableAlgorithm(TableEnforcement, Algorithm):
     def algorithm(self, calculation, arguments, parameters, *args, **kwargs):
         self.enforcement(arguments, parameters)
         function = lambda variables, **constants: calculation(variables, constants)
@@ -71,7 +67,16 @@ class UnVectorizedAlgorithm(Algorithm, ABC):
         return calculation(arguments, parameters)
 
 
-class UnVectorizedArrayAlgorithm(ArrayEnforcement, UnVectorizedAlgorithm, register=(AlgorithmType.Array, False)): pass
-class UnVectorizedTableAlgorithm(TableEnforcement, UnVectorizedAlgorithm, register=(AlgorithmType.Table, False)): pass
+class UnVectorizedArrayAlgorithm(ArrayEnforcement, UnVectorizedAlgorithm): pass
+class UnVectorizedTableAlgorithm(TableEnforcement, UnVectorizedAlgorithm): pass
+
+
+class Algorithms(Assembly):
+    class Vectorized(Assembly):
+        Array = VectorizedArrayAlgorithm
+        Table = VectorizedTableAlgorithm
+    class UnVectorized(Assembly):
+        Array = UnVectorizedArrayAlgorithm
+        Table = UnVectorizedTableAlgorithm
 
 

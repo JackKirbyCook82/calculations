@@ -9,28 +9,24 @@ Created on Thurs Aug 14 2025
 import numpy as np
 import pandas as pd
 import xarray as xr
-from enum import Enum
 from abc import ABC, abstractmethod
 
-from support.meta import RegistryMeta
+from support.concepts import Assembly
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["Computation"]
+__all__ = ["Computations"]
 __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ComputationType(Enum): Array, Table = list(range(2))
-class Computation(ABC, metaclass=RegistryMeta):
-    Type = ComputationType
-
+class Computation(ABC):
     @staticmethod
     @abstractmethod
     def computation(contents): pass
 
 
-class ArrayComputation(Computation, register=ComputationType.Array):
+class ArrayComputation(Computation):
     @staticmethod
     def computation(contents):
         assert isinstance(contents, dict)
@@ -43,7 +39,7 @@ class ArrayComputation(Computation, register=ComputationType.Array):
         return dataset
 
 
-class TableComputation(Computation, register=ComputationType.Table):
+class TableComputation(Computation):
     @staticmethod
     def computation(contents):
         assert isinstance(contents, dict)
@@ -55,4 +51,7 @@ class TableComputation(Computation, register=ComputationType.Table):
         return dataframe
 
 
+class Computations(Assembly):
+    Array = ArrayComputation
+    Table = TableComputation
 
