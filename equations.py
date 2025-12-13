@@ -206,7 +206,7 @@ class EquationMeta(ABCMeta):
     def factors(cls): return cls.__factors__
 
 
-class Equation(ABC):
+class Equation(ABC, metaclass=EquationMeta):
     def __init_subclass__(cls, *args, **kwargs): pass
     def __init__(self, variables, *args, **kwargs):
         assert isinstance(variables, dict)
