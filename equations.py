@@ -32,6 +32,13 @@ class Domain(ntuple("Domain", "arguments parameters")):
     def __iter__(self): return chain(self.arguments, self.parameters)
 
 
+class VariableError(Exception): pass
+class DependentError(VariableError): pass
+class IndependentError(VariableError): pass
+class ConstantError(VariableError): pass
+class SourceError(VariableError): pass
+
+
 class VariableType(Enum): DEPENDENT, INDEPENDENT, CONSTANT, SOURCE = list(range(4))
 class Variable(Node, ABC):
     Type = VariableType
@@ -101,7 +108,7 @@ class SourceVariable(Variable, ABC):
         def wrapper(arguments, parameters):
             if isinstance(self, IndependentVariable): return arguments[int(order.index(self))]
             elif isinstance(self, ConstantVariable): return parameters[str(self)]
-            else: raise Error[VariableType.DEPENDENT]()
+            else: raise DependentError()
         return wrapper
 
     @abstractmethod
@@ -118,7 +125,7 @@ class IndependentVariable(SourceVariable, ABC):
     def locate(self, arguments):
         locator = list(self.locator)
         content = self.find(arguments, *locator)
-        if isinstance(content, types.NoneType): raise Error.Independent()
+        if isinstance(content, types.NoneType): raise IndependentError()
         return content
 
     @Dispatchers.Type(locator=0)
@@ -139,15 +146,8 @@ class ConstantVariable(SourceVariable, ABC):
     def locate(self, parameters):
         assert isinstance(parameters, dict)
         content = parameters.get(self.locator, None)
-        if isinstance(content, types.NoneType): raise Error.Constant()
+        if isinstance(content, types.NoneType): raise ConstantError()
         return content
-
-
-class Error(Exception): pass
-class DependentError(Error): pass
-class IndependentError(Error): pass
-class ConstantError(Error): pass
-class SourceError(Error): pass
 
 
 class Factor(object):
@@ -182,11 +182,11 @@ class EquationMeta(ABCMeta):
     def __new__(mcs, name, bases, attrs, *args, **kwargs):
         exclude = [key for key, value in attrs.items() if isinstance(value, Factor)]
         attrs = {key: value for key, value in attrs.items() if key not in exclude}
-        cls = super(EquationMeta, mcs).__new__(mcs, name, bases, attrs, *args, **kwargs)
+        cls = super(EquationMeta, mcs).__new__(mcs, name, bases, attrs, **kwargs)
         return cls
 
     def __init__(cls, name, bases, attrs, *args, **kwargs):
-        super(EquationMeta, cls).__init__(name, bases, attrs, *args, **kwargs)
+        super(EquationMeta, cls).__init__(name, bases, attrs, **kwargs)
         existing = [dict(base.factors) for base in bases if issubclass(type(base), EquationMeta)]
         existing = reduce(lambda lead, lag: lead | lag, existing, dict())
         updated = {key: value for key, value in attrs.items() if isinstance(value, Factor)}
@@ -237,7 +237,7 @@ class Equation(ABC, metaclass=EquationMeta):
         def wrapper(arguments, **parameters):
             if isinstance(variable, IndependentVariable): return variable.locate(arguments)
             elif isinstance(variable, ConstantVariable): return variable.locate(parameters)
-            else: raise Error.Dependent()
+            else: raise DependentError()
         return wrapper
 
     def calculation(self, variable):
@@ -264,7 +264,9 @@ class Equation(ABC, metaclass=EquationMeta):
     def computation(contents): pass
 
     @staticmethod
-    def execute(arguments, /, **parameters): return; yield
+    def execute(arguments, /, **parameters):
+        return
+        yield
 
     @property
     def variables(self): return self.__variables

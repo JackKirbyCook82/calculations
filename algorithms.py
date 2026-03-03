@@ -33,18 +33,18 @@ class TableEnforcement(ABC):
     @staticmethod
     def enforcement(arguments, parameters):
         if not all([isinstance(argument, (pd.Series, np.number)) for argument in arguments]):
-            raise Algorithm([type(argument) for argument in arguments])
+            raise AlgorithmError([type(argument) for argument in arguments])
         if any([isinstance(parameter, (xr.Dataset, pd.Series)) for parameter in parameters.values()]):
-            raise Algorithm({key: type(parameter) for key, parameter in parameters.items()})
+            raise AlgorithmError({key: type(parameter) for key, parameter in parameters.items()})
 
 
 class ArrayEnforcement(ABC):
     @staticmethod
     def enforcement(arguments, parameters):
         if not all([isinstance(argument, (xr.DataArray, np.number)) for argument in arguments]):
-            raise Algorithm([type(argument) for argument in arguments])
+            raise AlgorithmError([type(argument) for argument in arguments])
         if any([isinstance(parameter, (xr.Dataset, pd.Series)) for parameter in parameters.values()]):
-            raise Algorithm({key: type(parameter) for key, parameter in parameters.items()})
+            raise AlgorithmError({key: type(parameter) for key, parameter in parameters.items()})
 
 
 class VectorizedArrayAlgorithm(ArrayEnforcement, Algorithm):
