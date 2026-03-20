@@ -151,7 +151,7 @@ class ConstantVariable(SourceVariable, ABC):
 
 
 class Factor(object):
-    def __init_subclass__(cls, *args, variable, **kwargs):
+    def __init_subclass__(cls, variable, **kwargs):
         cls.__variable__ = variable
 
     def __init__(self, *arguments, **parameters):
@@ -207,7 +207,7 @@ class EquationMeta(ABCMeta):
 
 
 class Equation(ABC, metaclass=EquationMeta):
-    def __init_subclass__(cls, *args, **kwargs): pass
+    def __init_subclass__(cls, **kwargs): pass
     def __init__(self, variables, *args, **kwargs):
         assert isinstance(variables, dict)
         assert all([isinstance(variable, Variable) for variable in variables.values()])
