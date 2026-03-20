@@ -19,7 +19,7 @@ from algorithms import Algorithms
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
 __all__ = ["Equation", "Variables", "Computations", "Algorithms", "Errors"]
-__copyright__ = "Copyright 2025, Jack Kirby Cook"
+__copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
